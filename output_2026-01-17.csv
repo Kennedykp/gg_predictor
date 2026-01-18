@@ -1,0 +1,24 @@
+datetime,league_name,home_team,away_team,lambda_home,lambda_away,gg_probability,odds,implied_probability,edge,decision,passes_filters,rejection_reasons
+2026-01-17T12:30Z,English Premier League,Manchester United,Manchester City,1.584,1.8720000000000003,0.6725871668887172,,,,NO BET,True,No odds available
+2026-01-17T15:00Z,English Premier League,Chelsea,Brentford,2.16,1.056,0.5769456686056266,,,,NO BET,True,No odds available
+2026-01-17T15:00Z,English Premier League,Leeds United,Fulham,2.448,1.1440000000000001,0.6225345416744075,,,,NO BET,True,No odds available
+2026-01-17T15:00Z,English Premier League,Liverpool,Burnley,3.12,0.96,0.5898574112579004,,,,NO BET,True,No odds available
+2026-01-17T15:00Z,English Premier League,Sunderland,Crystal Palace,1.4080000000000001,0.768,0.40492252287859576,,,,NO BET,True,No odds available
+2026-01-17T15:00Z,English Premier League,Tottenham Hotspur,West Ham United,1.7280000000000002,0.8640000000000001,0.4757580015742072,,,,NO BET,True,No odds available
+2026-01-17T17:30Z,English Premier League,Nottingham Forest,Arsenal,0.8640000000000001,1.904,0.4923430996824267,,,,NO BET,True,No odds available
+2026-01-17T14:30Z,Bundesliga,Borussia Dortmund,St. Pauli,2.311111111111111,0.26666666666666666,0.21086321703895095,,,,NO BET,True,No odds available
+2026-01-17T14:30Z,Bundesliga,FC Cologne,Mainz,3.1875,1.75,0.792123634408766,,,,NO BET,True,No odds available
+2026-01-17T14:30Z,Bundesliga,Hamburg SV,Borussia Mönchengladbach,1.95,1.2375,0.6088922742356287,,,,NO BET,True,No odds available
+2026-01-17T14:30Z,Bundesliga,TSG Hoffenheim,Bayer Leverkusen,4.0,2.5714285714285716,0.9066578703946274,,,,NO BET,True,No odds available
+2026-01-17T14:30Z,Bundesliga,VfL Wolfsburg,1. FC Heidenheim 1846,3.166666666666667,1.3333333333333335,0.7053680149132392,,,,NO BET,True,No odds available
+2026-01-17T17:30Z,Bundesliga,RB Leipzig,Bayern Munich,1.575,2.025,0.6883223265783096,,,,NO BET,True,No odds available
+2026-01-17T14:00Z,Serie A,Udinese,Internazionale,0.8800000000000001,2.1333333333333333,0.5159029060078525,,,,NO BET,True,No odds available
+2026-01-17T17:00Z,Serie A,Napoli,Sassuolo,1.8488888888888888,0.8533333333333333,0.48365177420030503,,,,NO BET,True,No odds available
+2026-01-17T19:45Z,Serie A,Cagliari,Juventus,0.7111111111111111,1.3866666666666665,0.3817236857950083,,,,NO BET,True,No odds available
+2026-01-17T13:00Z,La Liga,Real Madrid,Levante,2.24,0.6933333333333334,0.44685390768368655,,,,NO BET,True,No odds available
+2026-01-17T15:15Z,La Liga,Mallorca,Athletic Club,1.520987654320988,0.760493827160494,0.41620126725809076,,,,NO BET,True,No odds available
+2026-01-17T17:30Z,La Liga,Osasuna,Real Oviedo,2.5185185185185186,0.5333333333333333,0.3800461898180359,,,,NO BET,True,No odds available
+2026-01-17T20:00Z,La Liga,Real Betis,Villarreal,2.0,1.7111111111111115,0.7084501156614106,,,,NO BET,True,No odds available
+2026-01-17T16:00Z,Ligue 1,Lens,AJ Auxerre,3.2,0.2,0.17388031290397804,,,,NO BET,True,No odds available
+2026-01-17T18:00Z,Ligue 1,Toulouse,Nice,2.8,1.2444444444444445,0.66860845260138,,,,NO BET,True,No odds available
+2026-01-17T20:05Z,Ligue 1,Angers,Marseille,1.05,1.05,0.4225809300306713,,,,NO BET,True,No odds available

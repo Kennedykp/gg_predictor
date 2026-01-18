@@ -1,0 +1,17 @@
+datetime,league_name,home_team,away_team,lambda_home,lambda_away,gg_probability,odds,implied_probability,edge,decision,passes_filters,rejection_reasons
+2026-01-18T14:00Z,English Premier League,Wolverhampton Wanderers,Newcastle United,0.96,1.8399999999999999,0.5190997505431851,,,,NO BET,True,No odds available
+2026-01-18T16:30Z,English Premier League,Aston Villa,Everton,1.44,0.5760000000000001,0.33411694572162637,,,,NO BET,True,No odds available
+2026-01-18T14:30Z,Bundesliga,VfB Stuttgart,1. FC Union Berlin,1.95,1.0,0.5421861931904765,,,,NO BET,True,No odds available
+2026-01-18T16:30Z,Bundesliga,FC Augsburg,SC Freiburg,1.8765432098765433,1.7382716049382716,0.6979793883036662,,,,NO BET,True,No odds available
+2026-01-18T11:30Z,Serie A,Parma,Genoa,0.9955555555555554,1.5022222222222221,0.4901146470063399,,,,NO BET,True,No odds available
+2026-01-18T14:00Z,Serie A,Bologna,Fiorentina,1.5644444444444445,0.4977777777777777,0.31008684352591354,,,,NO BET,True,No odds available
+2026-01-18T17:00Z,Serie A,Torino,AS Roma,0.616,1.584,0.3655497902999861,,,,NO BET,True,No odds available
+2026-01-18T19:45Z,Serie A,AC Milan,Lecce,1.848888888888889,0.48,0.3212085503782648,,,,NO BET,True,No odds available
+2026-01-18T13:00Z,La Liga,Getafe,Valencia,1.7382716049382716,0.47407407407407404,0.3111584534095161,,,,NO BET,True,No odds available
+2026-01-18T15:15Z,La Liga,Atlético Madrid,Alavés,3.041975308641976,0.2765432098765432,0.23006508909731724,,,,NO BET,True,No odds available
+2026-01-18T17:30Z,La Liga,Celta Vigo,Rayo Vallecano,1.6640000000000001,0.9360000000000002,0.4927001590539963,,,,NO BET,True,No odds available
+2026-01-18T20:00Z,La Liga,Real Sociedad,Barcelona,1.7333333333333332,3.111111111111111,0.7866261175668495,,,,NO BET,True,No odds available
+2026-01-18T14:00Z,Ligue 1,Strasbourg,Metz,4.355555555555556,0.48888888888888893,0.3817292142084293,,,,NO BET,True,No odds available
+2026-01-18T16:15Z,Ligue 1,Nantes,Paris FC,1.422222222222222,1.6666666666666667,0.6154994663720564,,,,NO BET,True,No odds available
+2026-01-18T16:15Z,Ligue 1,Stade Rennais,Le Havre AC,3.15,0.4,0.3155524667515599,,,,NO BET,True,No odds available
+2026-01-18T19:45Z,Ligue 1,Lyon,Brest,2.8,0.675,0.46099535059040975,,,,NO BET,True,No odds available

@@ -38,20 +38,20 @@ def _make_request(endpoint: str, params: dict) -> Optional[dict]:
         return None
 
 
-# Sport key mapping for football leagues
+# Sport key mapping for football leagues (Mapped from ESPN codes)
 SPORT_KEYS = {
-    39: "soccer_epl",  # English Premier League
-    78: "soccer_germany_bundesliga",  # Bundesliga
-    135: "soccer_italy_serie_a",  # Serie A
-    140: "soccer_spain_la_liga",  # La Liga
-    61: "soccer_france_ligue_one",  # Ligue 1
+    "eng.1": "soccer_epl",  # English Premier League
+    "ger.1": "soccer_germany_bundesliga",  # Bundesliga
+    "ita.1": "soccer_italy_serie_a",  # Serie A
+    "esp.1": "soccer_spain_la_liga",  # La Liga
+    "fra.1": "soccer_france_ligue_one",  # Ligue 1
 }
 
 
 def get_btts_odds(
     home_team: str,
     away_team: str,
-    league_id: int,
+    league_id: str,
 ) -> Optional[float]:
     """
     Fetch BTTS (Both Teams To Score) Yes odds for a match.
@@ -59,7 +59,7 @@ def get_btts_odds(
     Args:
         home_team: Home team name
         away_team: Away team name
-        league_id: API-Football league ID
+        league_id: ESPN league code (e.g. 'eng.1')
 
     Returns:
         BTTS Yes odds as float, or None if not available

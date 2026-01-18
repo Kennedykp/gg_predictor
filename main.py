@@ -23,7 +23,7 @@ from datetime import date, datetime
 from typing import List, Dict, Any
 
 from config import ALLOWED_LEAGUES
-from api_football import get_fixtures, get_team_stats, get_league_avg_goals
+from espn import get_fixtures, get_team_stats, get_league_avg_goals
 from odds_api import get_btts_odds
 from poisson import calculate_gg_probability
 from filters import apply_filters
@@ -34,13 +34,6 @@ from output import print_results, write_csv, write_json
 def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[str, Any]:
     """
     Process a single fixture and return prediction result.
-
-    Args:
-        fixture: Fixture data from API
-        league_avg_goals: League average goals per team
-
-    Returns:
-        Result dictionary with prediction and decision
     """
     result = {
         "fixture_id": fixture["fixture_id"],
@@ -62,13 +55,13 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
         "rejection_reasons": [],
     }
 
-    # Fetch team statistics
+    # Fetch team statistics using league_code (league_id in fixture)
     home_stats = get_team_stats(fixture["home_team_id"], fixture["league_id"])
     away_stats = get_team_stats(fixture["away_team_id"], fixture["league_id"])
 
     # Check for missing data
     if home_stats is None or away_stats is None:
-        result["rejection_reasons"].append("Missing or unreliable data")
+        result["rejection_reasons"].append("Missing or unreliable team stats")
         return result
 
     # Validate required stats exist
@@ -108,8 +101,8 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
         away_avg_goals=away_stats.get("total_goals_avg", 0),
         home_clean_sheet_pct=home_stats.get("home_clean_sheet_pct", 0),
         away_clean_sheet_pct=away_stats.get("away_clean_sheet_pct", 0),
-        is_knockout_first_leg=False,  # Would need additional data
-        is_heavy_favorite_mismatch=False,  # Would need odds data
+        is_knockout_first_leg=False,
+        is_heavy_favorite_mismatch=False,
         has_reliable_data=True,
     )
 
@@ -118,10 +111,11 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
         result["rejection_reasons"].extend(filter_reasons)
 
     # Fetch odds (optional)
+    # Note: get_btts_odds might need update for ESPN IDs or just use names (it uses names)
     odds = get_btts_odds(
         home_team=fixture["home_team_name"],
         away_team=fixture["away_team_name"],
-        league_id=fixture["league_id"],
+        league_id=fixture["league_id"], # passing code (e.g. eng.1) might break int expectation in odds_api? check.
     )
     result["odds"] = odds
 
@@ -147,12 +141,6 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
 def run_daily_workflow(target_date: date) -> List[Dict[str, Any]]:
     """
     Run the daily GG prediction workflow.
-
-    Args:
-        target_date: Date to analyze fixtures for
-
-    Returns:
-        List of prediction results
     """
     print(f"\nFetching fixtures for {target_date.strftime('%Y-%m-%d')}...")
     print(f"Allowed leagues: {', '.join(ALLOWED_LEAGUES.values())}")
@@ -174,13 +162,13 @@ def run_daily_workflow(target_date: date) -> List[Dict[str, Any]]:
     league_avg_cache = {}
 
     for fixture in fixtures:
-        league_id = fixture["league_id"]
+        league_id = fixture["league_id"] # string code now
 
         # Get league average goals (cached)
         if league_id not in league_avg_cache:
             league_avg = get_league_avg_goals(league_id)
             if league_avg is None:
-                league_avg = 1.35  # Fallback default
+                league_avg = 1.35  # Fallback
             league_avg_cache[league_id] = league_avg
 
         league_avg_goals = league_avg_cache[league_id]
@@ -194,7 +182,6 @@ def run_daily_workflow(target_date: date) -> List[Dict[str, Any]]:
 
 def main():
     """Main entry point."""
-    # Parse optional date argument
     if len(sys.argv) > 1:
         try:
             target_date = datetime.strptime(sys.argv[1], "%Y-%m-%d").date()
@@ -205,13 +192,9 @@ def main():
     else:
         target_date = date.today()
 
-    # Run workflow
     results = run_daily_workflow(target_date)
-
-    # Output results
     print_results(results)
 
-    # Write to files
     date_str = target_date.strftime("%Y-%m-%d")
     write_csv(results, f"output_{date_str}.csv")
     write_json(results, f"output_{date_str}.json")

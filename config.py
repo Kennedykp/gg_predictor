@@ -10,29 +10,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# API Keys
+# ESPN API (Free, No Key Required)
+ESPN_BASE_URL = "http://site.api.espn.com/apis/site/v2/sports/soccer"
+
+# Legacy APIs (optional/deprecated)
+SPORTMONKS_API_KEY = os.getenv("SPORTMONKS_API_KEY", "")
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
-API_FOOTBALL_HOST = "v3.football.api-sports.io"
 ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")
 
-# League Whitelist - Phase 1 Only
-# API-Football league IDs for allowed leagues
+# League Whitelist - ESPN League Codes
+# Top 5 European leagues
 ALLOWED_LEAGUES = {
-    39: "English Premier League",
-    78: "Bundesliga",
-    135: "Serie A",
-    140: "La Liga",
-    61: "Ligue 1",
+    "eng.1": "English Premier League",
+    "ger.1": "Bundesliga",
+    "ita.1": "Serie A",
+    "esp.1": "La Liga",
+    "fra.1": "Ligue 1",
 }
 
-# Phase 2 leagues (DO NOT USE until Phase 1 proves stable)
+# Phase 2 leagues
 PHASE_2_LEAGUES = {
-    40: "EFL Championship",
-    79: "Bundesliga 2",
+    "eng.2": "EFL Championship",
+    "ger.2": "Bundesliga 2",
 }
-
-# Current season (2024/25 season - free plan only allows 2022-2024)
-# CURRENT_SEASON = 2024
 
 # Value & Decision Thresholds (DO NOT MODIFY)
 EDGE_THRESHOLD = 0.05  # 5% minimum edge required

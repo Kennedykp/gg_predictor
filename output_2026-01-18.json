@@ -1,7 +1,344 @@
 {
-  "generated_at": "2026-01-15T14:51:27.523115",
-  "total_matches": 0,
+  "generated_at": "2026-01-18T07:55:37.360315",
+  "total_matches": 16,
   "flagged_count": 0,
-  "no_bet_count": 0,
-  "results": []
+  "no_bet_count": 16,
+  "results": [
+    {
+      "fixture_id": "740815",
+      "datetime": "2026-01-18T14:00Z",
+      "league_id": "eng.1",
+      "league_name": "English Premier League",
+      "home_team": "Wolverhampton Wanderers",
+      "away_team": "Newcastle United",
+      "home_team_id": "380",
+      "away_team_id": "361",
+      "lambda_home": 0.96,
+      "lambda_away": 1.8399999999999999,
+      "gg_probability": 0.5190997505431851,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "740806",
+      "datetime": "2026-01-18T16:30Z",
+      "league_id": "eng.1",
+      "league_name": "English Premier League",
+      "home_team": "Aston Villa",
+      "away_team": "Everton",
+      "home_team_id": "362",
+      "away_team_id": "368",
+      "lambda_home": 1.44,
+      "lambda_away": 0.5760000000000001,
+      "gg_probability": 0.33411694572162637,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "746874",
+      "datetime": "2026-01-18T14:30Z",
+      "league_id": "ger.1",
+      "league_name": "Bundesliga",
+      "home_team": "VfB Stuttgart",
+      "away_team": "1. FC Union Berlin",
+      "home_team_id": "134",
+      "away_team_id": "598",
+      "lambda_home": 1.95,
+      "lambda_away": 1.0,
+      "gg_probability": 0.5421861931904765,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "746877",
+      "datetime": "2026-01-18T16:30Z",
+      "league_id": "ger.1",
+      "league_name": "Bundesliga",
+      "home_team": "FC Augsburg",
+      "away_team": "SC Freiburg",
+      "home_team_id": "3841",
+      "away_team_id": "126",
+      "lambda_home": 1.8765432098765433,
+      "lambda_away": 1.7382716049382716,
+      "gg_probability": 0.6979793883036662,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "736992",
+      "datetime": "2026-01-18T11:30Z",
+      "league_id": "ita.1",
+      "league_name": "Serie A",
+      "home_team": "Parma",
+      "away_team": "Genoa",
+      "home_team_id": "115",
+      "away_team_id": "3263",
+      "lambda_home": 0.9955555555555554,
+      "lambda_away": 1.5022222222222221,
+      "gg_probability": 0.4901146470063399,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "736987",
+      "datetime": "2026-01-18T14:00Z",
+      "league_id": "ita.1",
+      "league_name": "Serie A",
+      "home_team": "Bologna",
+      "away_team": "Fiorentina",
+      "home_team_id": "107",
+      "away_team_id": "109",
+      "lambda_home": 1.5644444444444445,
+      "lambda_away": 0.4977777777777777,
+      "gg_probability": 0.31008684352591354,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "736990",
+      "datetime": "2026-01-18T17:00Z",
+      "league_id": "ita.1",
+      "league_name": "Serie A",
+      "home_team": "Torino",
+      "away_team": "AS Roma",
+      "home_team_id": "239",
+      "away_team_id": "104",
+      "lambda_home": 0.616,
+      "lambda_away": 1.584,
+      "gg_probability": 0.3655497902999861,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "736988",
+      "datetime": "2026-01-18T19:45Z",
+      "league_id": "ita.1",
+      "league_name": "Serie A",
+      "home_team": "AC Milan",
+      "away_team": "Lecce",
+      "home_team_id": "103",
+      "away_team_id": "113",
+      "lambda_home": 1.848888888888889,
+      "lambda_away": 0.48,
+      "gg_probability": 0.3212085503782648,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "748338",
+      "datetime": "2026-01-18T13:00Z",
+      "league_id": "esp.1",
+      "league_name": "La Liga",
+      "home_team": "Getafe",
+      "away_team": "Valencia",
+      "home_team_id": "2922",
+      "away_team_id": "94",
+      "lambda_home": 1.7382716049382716,
+      "lambda_away": 0.47407407407407404,
+      "gg_probability": 0.3111584534095161,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "748334",
+      "datetime": "2026-01-18T15:15Z",
+      "league_id": "esp.1",
+      "league_name": "La Liga",
+      "home_team": "Atl\u00e9tico Madrid",
+      "away_team": "Alav\u00e9s",
+      "home_team_id": "1068",
+      "away_team_id": "96",
+      "lambda_home": 3.041975308641976,
+      "lambda_away": 0.2765432098765432,
+      "gg_probability": 0.23006508909731724,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "748335",
+      "datetime": "2026-01-18T17:30Z",
+      "league_id": "esp.1",
+      "league_name": "La Liga",
+      "home_team": "Celta Vigo",
+      "away_team": "Rayo Vallecano",
+      "home_team_id": "85",
+      "away_team_id": "101",
+      "lambda_home": 1.6640000000000001,
+      "lambda_away": 0.9360000000000002,
+      "gg_probability": 0.4927001590539963,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "748343",
+      "datetime": "2026-01-18T20:00Z",
+      "league_id": "esp.1",
+      "league_name": "La Liga",
+      "home_team": "Real Sociedad",
+      "away_team": "Barcelona",
+      "home_team_id": "89",
+      "away_team_id": "83",
+      "lambda_home": 1.7333333333333332,
+      "lambda_away": 3.111111111111111,
+      "gg_probability": 0.7866261175668495,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "746572",
+      "datetime": "2026-01-18T14:00Z",
+      "league_id": "fra.1",
+      "league_name": "Ligue 1",
+      "home_team": "Strasbourg",
+      "away_team": "Metz",
+      "home_team_id": "180",
+      "away_team_id": "177",
+      "lambda_home": 4.355555555555556,
+      "lambda_away": 0.48888888888888893,
+      "gg_probability": 0.3817292142084293,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "746569",
+      "datetime": "2026-01-18T16:15Z",
+      "league_id": "fra.1",
+      "league_name": "Ligue 1",
+      "home_team": "Nantes",
+      "away_team": "Paris FC",
+      "home_team_id": "165",
+      "away_team_id": "6851",
+      "lambda_home": 1.422222222222222,
+      "lambda_away": 1.6666666666666667,
+      "gg_probability": 0.6154994663720564,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "746571",
+      "datetime": "2026-01-18T16:15Z",
+      "league_id": "fra.1",
+      "league_name": "Ligue 1",
+      "home_team": "Stade Rennais",
+      "away_team": "Le Havre AC",
+      "home_team_id": "169",
+      "away_team_id": "3236",
+      "lambda_home": 3.15,
+      "lambda_away": 0.4,
+      "gg_probability": 0.3155524667515599,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    },
+    {
+      "fixture_id": "746567",
+      "datetime": "2026-01-18T19:45Z",
+      "league_id": "fra.1",
+      "league_name": "Ligue 1",
+      "home_team": "Lyon",
+      "away_team": "Brest",
+      "home_team_id": "167",
+      "away_team_id": "6997",
+      "lambda_home": 2.8,
+      "lambda_away": 0.675,
+      "gg_probability": 0.46099535059040975,
+      "odds": null,
+      "implied_probability": null,
+      "edge": null,
+      "passes_filters": true,
+      "decision": "NO BET",
+      "rejection_reasons": [
+        "No odds available"
+      ]
+    }
+  ]
 }
