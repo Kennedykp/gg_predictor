@@ -1,1 +1,18 @@
-/.env
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# macOS
+.DS_Store
+
+# Output files (generated artifacts)
+output_*.csv
+output_*.json
+analysis_output_*.json
+run3/run3_output_*.json

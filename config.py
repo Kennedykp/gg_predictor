@@ -15,7 +15,9 @@ ESPN_BASE_URL = "http://site.api.espn.com/apis/site/v2/sports/soccer"
 
 # Legacy APIs (optional/deprecated)
 SPORTMONKS_API_KEY = os.getenv("SPORTMONKS_API_KEY", "")
+SPORTMONKS_BASE_URL = os.getenv("SPORTMONKS_BASE_URL", "https://api.sportmonks.com/v3/football")
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
+API_FOOTBALL_HOST = os.getenv("API_FOOTBALL_HOST", "v3.football.api-sports.io")
 ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")
 
 # League Whitelist - ESPN League Codes

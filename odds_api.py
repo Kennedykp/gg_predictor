@@ -102,7 +102,7 @@ def get_btts_odds(
     return None
 
 
-def get_upcoming_odds(league_id: int) -> Dict[str, Any]:
+def get_upcoming_odds(league_id: str) -> Dict[str, Any]:
     """
     Fetch all upcoming BTTS odds for a league.
 
