@@ -1,0 +1,190 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gg-predictor"
+version = "0.1.0"
+description = "GG/BTTS football probability system (POISSON_V1 baseline)"
+readme = "GG.md"
+requires-python = ">=3.12"
+
+# Runtime dependencies. Pinned for reproducibility (Epic 1A, GG-022).
+# Only what the existing source actually imports - nothing added.
+dependencies = [
+    "requests==2.32.3",
+    "python-dotenv==1.0.1",
+]
+
+[project.optional-dependencies]
+# Development tooling for Epic 1A only. Deliberately minimal.
+dev = [
+    "pytest==8.3.4",
+    "ruff==0.8.6",
+    "mypy==1.14.1",
+    "types-requests==2.32.0.20241016",
+]
+
+# ---------------------------------------------------------------------------
+# The existing production modules live at the repository root (main.py,
+# poisson.py, espn.py, ...). Epic 1A deliberately does NOT move them into a
+# src/ layout - that is deferred until regression protection exists.
+# py-modules is therefore listed explicitly rather than auto-discovered, so
+# setuptools does not attempt to package tests/ or docs/.
+# ---------------------------------------------------------------------------
+[tool.setuptools]
+py-modules = [
+    "config",
+    "poisson",
+    "filters",
+    "decision",
+    "output",
+    "espn",
+    "odds_api",
+    "main",
+    "analyze_all",
+]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# Repository root on sys.path so tests can `import poisson` directly, matching
+# how the production entry points import each other today.
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+    "characterization: documents CURRENT (possibly wrong) legacy behaviour, not desired behaviour",
+    "golden: frozen POISSON_V1 input/output pairs - failure means model drift",
+    "invariant: mathematical property that follows from the current implementation",
+    "spec: verifies agreement between code and GG.md",
+]
+
+# ---------------------------------------------------------------------------
+# Ruff - configured conservatively. Epic 1A explicitly avoids a repo-wide
+# style rewrite, so only high-signal rules are enabled and legacy modules
+# carry targeted ignores rather than being reformatted.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+    ".venv",
+    # Run-3 is PARKED and OUT OF SCOPE. Excluded so tooling can never
+    # prompt a change to it. Do not remove without a scope decision.
+    "run3",
+]
+
+[tool.ruff.lint]
+# Conservative rule set: real errors and likely bugs, not stylistic opinions.
+select = [
+    "E4",   # imports
+    "E7",   # statement-level errors
+    "E9",   # syntax / IO errors
+    "F",    # pyflakes: undefined names, unused imports/variables
+    "I",    # import sorting
+    "B",    # flake8-bugbear: likely bugs
+]
+ignore = [
+    "E501",  # line length - legacy f-strings in filters.py exceed it; cosmetic
+    # ---------------------------------------------------------------------
+    # "UP" (pyupgrade) is deliberately NOT selected.
+    #
+    # Enabling it produces 94 findings across 12 of the 13 legacy production
+    # modules - all of them cosmetic modernization (Dict -> dict,
+    # Optional[X] -> X | None, typing imports). Epic 1A's constraint is that
+    # production code is not touched, so a rule that can only be satisfied by
+    # rewriting every legacy module would either fail CI permanently or force
+    # exactly the churn this Epic forbids.
+    #
+    # This is recorded as a real finding in docs/TECHNICAL_DEBT.md rather than
+    # enforced here. Turn "UP" on during the Epic 2 src/ migration, when those
+    # files are being moved anyway.
+    # ---------------------------------------------------------------------
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Legacy modules. Each entry below is a REAL finding that is being reported in
+# docs/TECHNICAL_DEBT.md rather than silently fixed, because Epic 1A does not
+# modify production code. These ignores should be removed - and the underlying
+# issues fixed - when the relevant module is next touched.
+# Import ordering (I001) across the legacy root modules. Reordering imports is
+# behaviour-preserving in most codebases, but shared/odds.py mutates sys.path
+# before importing, so ordering there is load-bearing. Left alone wholesale
+# rather than fixed selectively.
+"config.py" = ["I001"]
+"poisson.py" = ["I001"]
+"filters.py" = ["I001"]
+"decision.py" = ["I001"]
+"output.py" = ["I001"]
+"main.py" = ["I001"]
+"odds_api.py" = ["I001"]
+"sportmonks.py" = ["I001"]
+"api_football.py" = ["I001"]
+"espn.py" = ["I001", "E701"]          # E701: `if x: return y` one-liners
+# F401 (unused import) and F541 (f-string with no placeholder) below are REAL
+# dead-code findings, recorded in docs/TECHNICAL_DEBT.md GG-018 and reported
+# rather than removed, because Epic 1A does not edit production files.
+"sofascore.py" = ["I001", "F401"]            # unused: config.ALLOWED_LEAGUES
+"analyze_all.py" = ["I001", "F541", "F401"]  # unused: typing.Optional, config.ALLOWED_LEAGUES
+"shared/odds.py" = ["I001", "E402", "F401"]  # E402 sys.path mutation; unused: typing.List, datetime.date
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "poisson", "filters", "decision", "output", "espn", "odds_api"]
+
+# ---------------------------------------------------------------------------
+# mypy - gradual adoption. Strict on the pure mathematical core we are
+# freezing this Epic; lenient elsewhere so no unrelated refactor is forced.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+files = ["poisson.py", "filters.py", "decision.py", "config.py", "tests"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+# Deliberately NOT enabled repo-wide yet: disallow_untyped_defs,
+# disallow_any_generics, strict_equality. The legacy provider modules use
+# bare Dict[str, Any] throughout (see docs/TECHNICAL_DEBT.md GG-018) and
+# turning these on now would require broad unrelated edits.
+exclude = ['^run3/', '^\.venv/']
+
+[[tool.mypy.overrides]]
+# The provider / IO / entry-point modules are not type-clean yet. They are
+# excluded from checking rather than modified. Epic 1B owns the data layer.
+module = [
+    "espn",
+    "odds_api",
+    "output",
+    "main",
+    "analyze_all",
+    "sofascore",
+    "sportmonks",
+    "api_football",
+    "shared.odds",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# decision.py: 13 errors, all from ONE root cause. `make_decision` builds a
+# heterogeneous result dict, so mypy infers
+#     dict[str, list[Any] | str | float | None]
+# and then rejects every `result["reasons"].append(...)` because the value type
+# might not be a list.
+#
+# This is a REAL finding - the untyped heterogeneous dict is exactly the weak
+# typing / inconsistent-return-schema issue recorded as GG-018 - and the proper
+# fix is a TypedDict or dataclass. That is a production code change, which Epic
+# 1A does not make. Errors are suppressed here and the issue is reported in
+# docs/TECHNICAL_DEBT.md instead of being silently patched.
+#
+# Note the runtime behaviour is correct; this is a typing expressiveness gap,
+# not a live bug. tests/unit/test_decision.py covers the module behaviourally.
+module = ["decision"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["dotenv", "dotenv.*"]
+ignore_missing_imports = true
