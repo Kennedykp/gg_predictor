@@ -24,6 +24,7 @@ from poisson import calculate_gg_probability
 from filters import apply_filters
 from shared.odds import analyze_market, clear_cache
 from config import ALLOWED_LEAGUES
+from domain import LeagueStats, TeamStats, validate_poisson_inputs
 
 
 def analyze_gg_match(
@@ -61,12 +62,46 @@ def analyze_gg_match(
             })
         return results
     
+    # Validate the five required POISSON_V1 inputs BEFORE the model call.
+    # GG-001 (Epic 1B.1). This path was the most dangerous consequence of the
+    # old behaviour: a missing statistic became 0, P(GG_YES) collapsed to 0.0,
+    # and `gg_no_prob = 1 - 0.0` published a 100%-confident GG_NO - which could
+    # classify as STRONG_VALUE and RECOMMEND_PLAY on data that never arrived.
+    validation = validate_poisson_inputs(
+        league=LeagueStats.unattributed(fixture["league_id"], league_avg),
+        home_team=TeamStats.from_provider_dict(home_stats),
+        away_team=TeamStats.from_provider_dict(away_stats),
+    )
+
+    if not validation.is_complete:
+        for market in ["GG_YES", "GG_NO"]:
+            results.append({
+                "fixture_id": fixture["fixture_id"],
+                "league": fixture["league_name"],
+                "home_team": fixture["home_team_name"],
+                "away_team": fixture["away_team_name"],
+                "datetime": fixture.get("datetime"),
+                "market": market,
+                "model_probability": None,
+                "odds": None,
+                "implied_probability": None,
+                "edge": None,
+                "classification": "NO_ODDS",
+                "system_recommendation": "RECOMMEND_NO_PLAY",
+                "filter_status": "MISSING_DATA",
+                "filter_reasons": [validation.reason()],
+            })
+        return results
+
+    model_inputs = validation.inputs
+    assert model_inputs is not None  # guaranteed by is_complete
+
     prob_result = calculate_gg_probability(
-        league_avg_goals=league_avg,
-        home_goals_scored_home=home_stats.get("home_goals_scored", 0),
-        home_goals_conceded_home=home_stats.get("home_goals_conceded", 0),
-        away_goals_scored_away=away_stats.get("away_goals_scored", 0),
-        away_goals_conceded_away=away_stats.get("away_goals_conceded", 0),
+        league_avg_goals=model_inputs.league_avg_goals,
+        home_goals_scored_home=model_inputs.home_goals_scored_home,
+        home_goals_conceded_home=model_inputs.home_goals_conceded_home,
+        away_goals_scored_away=model_inputs.away_goals_scored_away,
+        away_goals_conceded_away=model_inputs.away_goals_conceded_away,
     )
     
     if not prob_result:
@@ -92,13 +127,32 @@ def analyze_gg_match(
     gg_yes_prob = prob_result["gg_probability"]
     gg_no_prob = 1 - gg_yes_prob
     
-    # Apply filters
-    passes_filters, filter_reasons = apply_filters(
-        home_avg_goals=home_stats.get("home_goals_scored", 0),
-        away_avg_goals=away_stats.get("away_goals_scored", 0),
-        home_clean_sheet_pct=home_stats.get("home_clean_sheet_pct", 0),
-        away_clean_sheet_pct=away_stats.get("away_clean_sheet_pct", 0),
+    # Apply filters.
+    # NOTE (GG-006, out of scope): this passes single-side scoring rates into
+    # parameters named `*_avg_goals`, whereas main.py passes `total_goals_avg`.
+    # The two entry points therefore filter differently. Left exactly as-is;
+    # only the None-safety guard below is new.
+    #
+    # Filter inputs can now be None (GG-001), and comparing None to a threshold
+    # raises TypeError. Unavailable input means the filter cannot be evaluated,
+    # so the fixture is rejected as unreliable rather than compared against an
+    # invented number. Thresholds are untouched.
+    filter_inputs = (
+        home_stats.get("home_goals_scored"),
+        away_stats.get("away_goals_scored"),
+        home_stats.get("home_clean_sheet_pct"),
+        away_stats.get("away_clean_sheet_pct"),
     )
+
+    if any(value is None for value in filter_inputs):
+        passes_filters, filter_reasons = False, ["Missing or unreliable data"]
+    else:
+        passes_filters, filter_reasons = apply_filters(
+            home_avg_goals=filter_inputs[0],
+            away_avg_goals=filter_inputs[1],
+            home_clean_sheet_pct=filter_inputs[2],
+            away_clean_sheet_pct=filter_inputs[3],
+        )
     
     filter_status = "PASSED" if passes_filters else "FILTERED"
     

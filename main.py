@@ -29,6 +29,7 @@ from poisson import calculate_gg_probability
 from filters import apply_filters
 from decision import make_decision
 from output import print_results, write_csv, write_json
+from domain import LeagueStats, TeamStats, validate_poisson_inputs
 
 
 def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[str, Any]:
@@ -64,27 +65,37 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
         result["rejection_reasons"].append("Missing or unreliable team stats")
         return result
 
-    # Validate required stats exist
-    required_home = [
-        home_stats.get("home_goals_scored"),
-        home_stats.get("home_goals_conceded"),
-    ]
-    required_away = [
-        away_stats.get("away_goals_scored"),
-        away_stats.get("away_goals_conceded"),
-    ]
+    # Validate the five required POISSON_V1 inputs BEFORE calling the model.
+    # GG-001 (Epic 1B.1): this guard existed before but could never fire, because
+    # the provider converted every absent statistic to 0. Now that absence is
+    # represented as None, incomplete data is refused instead of being modelled.
+    #
+    # Nothing is substituted here - no zero, no league average, no other team's
+    # figures. An unavailable input means no prediction for this fixture.
+    # UNATTRIBUTED, not CALCULATED: get_league_avg_goals() substitutes 1.35
+    # internally, so this layer cannot tell a measured average from the fallback
+    # (GG-003, out of scope here). Labelling it honestly rather than inferring
+    # from the value - a real league average can legitimately be 1.35.
+    validation = validate_poisson_inputs(
+        league=LeagueStats.unattributed(fixture["league_id"], league_avg_goals),
+        home_team=TeamStats.from_provider_dict(home_stats),
+        away_team=TeamStats.from_provider_dict(away_stats),
+    )
 
-    if None in required_home or None in required_away:
-        result["rejection_reasons"].append("Missing goal statistics")
+    if not validation.is_complete:
+        result["rejection_reasons"].append(validation.reason())
         return result
+
+    model_inputs = validation.inputs
+    assert model_inputs is not None  # guaranteed by is_complete
 
     # Calculate GG probability using Poisson model
     poisson_result = calculate_gg_probability(
-        league_avg_goals=league_avg_goals,
-        home_goals_scored_home=home_stats["home_goals_scored"],
-        home_goals_conceded_home=home_stats["home_goals_conceded"],
-        away_goals_scored_away=away_stats["away_goals_scored"],
-        away_goals_conceded_away=away_stats["away_goals_conceded"],
+        league_avg_goals=model_inputs.league_avg_goals,
+        home_goals_scored_home=model_inputs.home_goals_scored_home,
+        home_goals_conceded_home=model_inputs.home_goals_conceded_home,
+        away_goals_scored_away=model_inputs.away_goals_scored_away,
+        away_goals_conceded_away=model_inputs.away_goals_conceded_away,
     )
 
     if poisson_result is None:
@@ -95,16 +106,31 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
     result["lambda_away"] = poisson_result["lambda_away"]
     result["gg_probability"] = poisson_result["gg_probability"]
 
-    # Apply hard filters
-    passes_filters, filter_reasons = apply_filters(
-        home_avg_goals=home_stats.get("total_goals_avg", 0),
-        away_avg_goals=away_stats.get("total_goals_avg", 0),
-        home_clean_sheet_pct=home_stats.get("home_clean_sheet_pct", 0),
-        away_clean_sheet_pct=away_stats.get("away_clean_sheet_pct", 0),
-        is_knockout_first_leg=False,
-        is_heavy_favorite_mismatch=False,
-        has_reliable_data=True,
+    # Apply hard filters.
+    # Filter inputs can now be None (GG-001), and comparing None against a
+    # threshold raises TypeError. When an input is unavailable the filter cannot
+    # be evaluated, so the fixture is rejected as unreliable data - the same
+    # outcome apply_filters() produces for has_reliable_data=False, reached
+    # without inventing a number to compare. Thresholds are untouched.
+    filter_inputs = (
+        home_stats.get("total_goals_avg"),
+        away_stats.get("total_goals_avg"),
+        home_stats.get("home_clean_sheet_pct"),
+        away_stats.get("away_clean_sheet_pct"),
     )
+
+    if any(value is None for value in filter_inputs):
+        passes_filters, filter_reasons = False, ["Missing or unreliable data"]
+    else:
+        passes_filters, filter_reasons = apply_filters(
+            home_avg_goals=filter_inputs[0],
+            away_avg_goals=filter_inputs[1],
+            home_clean_sheet_pct=filter_inputs[2],
+            away_clean_sheet_pct=filter_inputs[3],
+            is_knockout_first_leg=False,
+            is_heavy_favorite_mismatch=False,
+            has_reliable_data=True,
+        )
 
     result["passes_filters"] = passes_filters
     if not passes_filters:

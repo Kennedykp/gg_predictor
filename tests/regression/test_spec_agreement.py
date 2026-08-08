@@ -136,13 +136,35 @@ def test_d1_primary_data_source_disagreement():
 
 
 @pytest.mark.spec
-@pytest.mark.skip(
-    reason="D2 UNRESOLVED: GG.md says 'if any of these are missing -> NO BET', but "
-    "espn.get_stat() returns 0 for missing stats and poisson.py accepts 0.0 as "
-    "valid data. Characterized in tests/unit/test_poisson.py; fix belongs to Epic 1B."
-)
-def test_d2_missing_data_contract_disagreement():
-    raise AssertionError("placeholder - see docs/REPO_AUDIT.md D2")
+def test_d2_missing_data_now_blocks_the_prediction():
+    """
+    D2 RESOLVED by Epic 1B.1.
+
+    GG.md §6: "if any of these are missing -> NO BET". Previously unenforceable,
+    because `espn.get_stat()` turned every absent statistic into 0 and the code
+    could not tell missing from genuinely zero.
+
+    The provider now reports absence as None and the pipeline validates the five
+    required POISSON_V1 inputs before the model call, so the spec's rule holds.
+
+    `poisson.py` itself is unchanged - it is the frozen POISSON_V1 baseline and
+    still accepts 0.0 as valid, which is correct: a genuine 0.0 IS valid. The
+    fix was to stop fabricating that 0.0 upstream.
+
+    End-to-end coverage: tests/integration/test_pipeline_missing_data.py
+    Provider-level coverage: tests/unit/test_espn_missing_data.py
+    """
+    from domain import LeagueStats, TeamStats, validate_poisson_inputs
+
+    incomplete = TeamStats(team_id="1", league_id="eng.1")  # nothing supplied
+    result = validate_poisson_inputs(
+        league=LeagueStats.calculated("eng.1", 1.35),
+        home_team=incomplete,
+        away_team=incomplete,
+    )
+
+    assert not result.is_complete, "missing statistics must block the prediction"
+    assert result.inputs is None, "no substituted values may reach POISSON_V1"
 
 
 @pytest.mark.spec

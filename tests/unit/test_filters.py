@@ -185,7 +185,10 @@ class TestProductionWiringCannotTriggerFilters:
 
     @pytest.mark.characterization
     def test_hardcoded_zero_clean_sheet_can_never_trigger_rejection(self):
-        # espn.get_team_stats() hardcodes both clean-sheet rates to 0.
+        # espn.get_team_stats() still hardcodes both clean-sheet rates to 0
+        # (GG-002, deliberately out of scope for Epic 1B.1 - ESPN supplies no
+        # clean-sheet data, and switching these to "unavailable" would reject
+        # every fixture and change production output).
         # The filter fires only when the value exceeds 0.40.
         assert not (0 > MAX_CLEAN_SHEET_PCT)
         args = dict(PASSING, home_clean_sheet_pct=0, away_clean_sheet_pct=0)
