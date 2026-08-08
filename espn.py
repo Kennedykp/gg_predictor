@@ -5,6 +5,7 @@ Provides free access to:
 - Fixtures (via scoreboard)
 - Team statistics (via team endpoints)
 - League averages (via standings)
+- Completed match history (via team schedule) - Epic 1B.4
 
 No API key required.
 
@@ -32,6 +33,7 @@ from config import (
     ESPN_TIMEOUT_SECONDS,
     EUROPEAN_SEASON_ROLLOVER_MONTH,
 )
+from domain.match_records import DerivedHistory, MatchRecord, Venue, derive_history
 
 
 # ---------------------------------------------------------------------------
@@ -450,3 +452,302 @@ def get_league_avg_goals(league_code: str, season_id: Optional[int] = None) -> O
         return None
 
     return total_goals / total_matches
+
+
+# ---------------------------------------------------------------------------
+# Match-level history (Epic 1B.4)
+#
+# ENDPOINT, verified live 2026-08-08:
+#   GET {ESPN_BASE_URL}/{league}/teams/{team_id}/schedule[?season=YYYY]
+#
+# What the live investigation established (docs/EPIC_1B4_MATCH_HISTORY.md):
+#
+#   COMPETITION PURITY - the league-scoped path returns ONLY that league's
+#   matches. Real Madrid's esp.1 schedule holds 38 esp.1 events; its UCL ties
+#   are on the uefa.champions path, not mixed in. Every event still carries
+#   `league.slug`, and this adapter checks it anyway rather than trusting the
+#   path: a silent upstream change that started mixing in cup matches would
+#   otherwise contaminate a league statistic invisibly.
+#
+#   SEASON - unlike the team STATISTICS endpoint (which ignores `season=` and
+#   always answers with current-season aggregates, GG-024), this endpoint DOES
+#   honour it. `?season=2023` returns the 2023-24 fixtures and echoes
+#   `requestedSeason.year = 2023`. That does NOT make historical backtesting
+#   safe; see TASK 26 and the doc.
+#
+#   RESULTS-ONLY - in every league sampled, including mid-season ones, the
+#   response contained exclusively completed events. Future fixtures were never
+#   present. That is an OBSERVATION, not a guarantee, so the completion policy
+#   below is enforced regardless.
+# ---------------------------------------------------------------------------
+
+# ESPN status names that mean "this match produced a real, final score".
+#
+# `status.type.completed` and `state == "post"` are the primary signals, but
+# neither is sufficient alone: an ABANDONED match also reports state `post`, and
+# its partial score is not a result. The allow-list is therefore intersected
+# with those flags. Anything unrecognised is EXCLUDED (TASK 7: when uncertain,
+# exclude) - a new status name will suppress a match, never fabricate one.
+_COMPLETED_STATUS_NAMES = frozenset({
+    "STATUS_FULL_TIME",       # observed live on every completed soccer event
+    "STATUS_FINAL",           # ESPN's generic terminal status
+    "STATUS_FINAL_AET",       # after extra time
+    "STATUS_FINAL_PEN",       # after penalties
+})
+
+
+def _is_completed_event(status_type: Dict[str, Any]) -> bool:
+    """
+    True only for a match with a trustworthy final score.
+
+    All three must agree: the structured `completed` flag, `state == post`, and
+    a recognised terminal status name. Abandoned and suspended matches fail the
+    name check even though they can present as post/completed.
+    """
+    return (
+        bool(status_type.get("completed"))
+        and status_type.get("state") == FixtureState.POST.value
+        and status_type.get("name") in _COMPLETED_STATUS_NAMES
+    )
+
+
+def _parse_score(competitor: Dict[str, Any]) -> Optional[int]:
+    """
+    Goals for one competitor, or None if the payload does not clearly state it.
+
+    ESPN nests the score as `{"value": 2.0, "displayValue": "2"}` on the
+    schedule endpoint but uses a bare string on some others, so both are
+    accepted. Everything else - missing, null, non-numeric, negative, or
+    fractional - returns None, which drops the match.
+
+    A missing score is NEVER read as 0. That would invent a clean sheet and a
+    BTTS "no" out of an absent field, which is the exact class of bug Epic 1B.1
+    exists to prevent.
+    """
+    score = competitor.get("score")
+    raw: Any = score.get("value") if isinstance(score, dict) else score
+
+    if isinstance(raw, bool) or raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return None
+        try:
+            raw = float(raw)
+        except ValueError:
+            return None
+    if not isinstance(raw, (int, float)):
+        return None
+
+    goals = int(raw)
+    if goals != raw or goals < 0:
+        # 1.5 goals, or -1, means we are misreading the field. Refuse it.
+        return None
+    return goals
+
+
+def parse_schedule_events(
+    payload: Dict[str, Any],
+    team_id: str,
+    league_code: str,
+) -> List[MatchRecord]:
+    """
+    Convert an ESPN team-schedule payload into MatchRecords for `team_id`.
+
+    ALL ESPN JSON knowledge lives here. `MatchRecord` is provider-independent -
+    the domain layer never sees a `competitors` array - so a second provider can
+    be added later by writing another adapter, not by teaching the domain about
+    ESPN.
+
+    An event is SKIPPED unless every one of these can be established:
+      - the match is completed with a recognised terminal status
+      - both competitors carry a team id, one of which is `team_id`
+      - the perspective team's `homeAway` is exactly "home" or "away"
+      - a parseable, non-negative, integral score for BOTH sides
+      - a parseable kickoff timestamp
+
+    Skipping is silent by design: a schedule legitimately contains matches this
+    pipeline cannot use, and a warning per event would drown the run. What is
+    never done is substituting a default for any of the above.
+    """
+    records: List[MatchRecord] = []
+
+    for event in payload.get("events") or []:
+        competitions = event.get("competitions") or []
+        if not competitions:
+            continue
+        competition = competitions[0]
+
+        status_type = ((competition.get("status") or {}).get("type")) or {}
+        if not _is_completed_event(status_type):
+            continue
+
+        competitors = competition.get("competitors") or []
+        if len(competitors) != 2:
+            # Not a two-sided football match as far as this parser is concerned.
+            continue
+
+        ours = None
+        theirs = None
+        for competitor in competitors:
+            # `competitor.id` is the team id on this endpoint; `team.id` is the
+            # same value and is read as a fallback in case the shape shifts.
+            competitor_id = competitor.get("id") or (competitor.get("team") or {}).get("id")
+            if competitor_id is None:
+                continue
+            if str(competitor_id) == str(team_id):
+                ours = competitor
+            else:
+                theirs = competitor
+
+        if ours is None or theirs is None:
+            continue
+
+        # ------------------------------------------------------------------
+        # Venue perspective (TASK 6). The single most dangerous mapping in this
+        # Epic: reversing it silently swaps every clean sheet for a shutout
+        # suffered. Read from ESPN's own homeAway label on OUR competitor, never
+        # inferred from array order, and never defaulted.
+        # ------------------------------------------------------------------
+        home_away = ours.get("homeAway")
+        if home_away == "home":
+            venue = Venue.HOME
+        elif home_away == "away":
+            venue = Venue.AWAY
+        else:
+            continue
+
+        goals_for = _parse_score(ours)
+        goals_against = _parse_score(theirs)
+        if goals_for is None or goals_against is None:
+            continue
+
+        kickoff = parse_kickoff(event.get("date") or competition.get("date"))
+        if kickoff is None:
+            # Without a kickoff the record can never satisfy the cutoff, so it
+            # would be dead weight at best and a leak at worst.
+            continue
+
+        event_id = event.get("id") or competition.get("id")
+        opponent_id = theirs.get("id") or (theirs.get("team") or {}).get("id")
+
+        records.append(
+            MatchRecord(
+                venue=venue,
+                goals_for=goals_for,
+                goals_against=goals_against,
+                completed=True,
+                kickoff=kickoff,
+                event_id=str(event_id) if event_id is not None else None,
+                # The event's own league, not the requested one. If ESPN ever
+                # mixes competitions, the mismatch is preserved here so the
+                # domain filter can drop it, instead of being papered over.
+                competition=((event.get("league") or {}).get("slug")) or None,
+                team_id=str(team_id),
+                opponent_id=str(opponent_id) if opponent_id is not None else None,
+            )
+        )
+
+    return records
+
+
+# Per-run schedule cache (TASK 21).
+#
+# One analysis run asks for the same team's schedule repeatedly - main.py and
+# analyze_all.py each resolve both sides of every fixture, and a league's
+# fixtures share teams across dates. Keyed by every parameter that changes the
+# response: league, team and season.
+#
+# Deliberately a plain dict: process-lifetime, in-memory, no eviction, no Redis,
+# no disk. It caches RAW RECORDS ONLY - never a derived statistic - so the
+# target-kickoff cutoff still runs per fixture and cannot be bypassed by a cache
+# hit. A failure is not cached, so one transient outage does not poison the rest
+# of the run.
+_schedule_cache: Dict[tuple, List[MatchRecord]] = {}
+
+
+def clear_schedule_cache() -> None:
+    """Drop the per-run cache. For tests, and for any long-lived caller."""
+    _schedule_cache.clear()
+
+
+def get_team_match_records(
+    team_id: str,
+    league_code: str,
+    season: Optional[int] = None,
+) -> Optional[List[MatchRecord]]:
+    """
+    Completed match records for one team, from ESPN's team-schedule endpoint.
+
+    Returns:
+        list  - the completed matches ESPN reported (possibly EMPTY, which is a
+                real answer: in August a team may genuinely have played none)
+        None  - the request FAILED. A different fact, and the caller must not
+                treat it as "no matches" (TASK 19).
+
+    That distinction is the reason for Optional. Collapsing the two would make an
+    ESPN outage indistinguishable from a promoted side's blank record, and both
+    would silently become a 0% clean-sheet rate that passes the filter.
+    """
+    if season is None:
+        season = resolve_season(league_code)
+
+    cache_key = (league_code, str(team_id), season)
+    if cache_key in _schedule_cache:
+        return _schedule_cache[cache_key]
+
+    url = f"{ESPN_BASE_URL}/{league_code}/teams/{team_id}/schedule"
+    # Same _fetch transport as every other ESPN call here: HTTPS, timeout,
+    # bounded retry on transient failure, status validation, malformed-JSON
+    # handling. No second HTTP stack (TASK 20).
+    result = _fetch(url, params={"season": season})
+
+    if not result.ok:
+        if result.error == ESPNError.EMPTY_RESPONSE:
+            # HTTP 200 with `{}`. This endpoint returns a populated object even
+            # for a team with no fixtures, so an empty body is a provider
+            # problem, not evidence of zero matches.
+            print(f"ESPN schedule empty for {league_code}/{team_id} season={season}")
+        return None
+
+    records = parse_schedule_events(result.data or {}, team_id, league_code)
+    _schedule_cache[cache_key] = records
+    return records
+
+
+def get_team_history(
+    team_id: str,
+    league_code: str,
+    venue: str,
+    target_kickoff: datetime,
+    exclude_event_id: Optional[str] = None,
+    season: Optional[int] = None,
+) -> Optional[DerivedHistory]:
+    """
+    Derived clean-sheet and BTTS rates for one team, at one venue, as of one
+    kickoff.
+
+    The only history function the pipeline should call. It composes fetch ->
+    parse -> `domain.derive_history`, and `derive_history` takes the cutoff as a
+    REQUIRED keyword argument, so there is no path through this module that can
+    produce a statistic without applying it.
+
+    `competition=league_code` is passed deliberately: GG.md scopes the model to
+    league matches and explicitly excludes friendlies and early cup rounds, so a
+    cup result must not inflate a league clean-sheet rate even if the feed offers
+    one.
+
+    Returns None when the provider failed - never a zero rate.
+    """
+    records = get_team_match_records(team_id, league_code, season=season)
+    if records is None:
+        return None
+
+    return derive_history(
+        records,
+        target_kickoff=target_kickoff,
+        venue=venue,
+        competition=league_code,
+        exclude_event_id=exclude_event_id,
+    )

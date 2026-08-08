@@ -19,17 +19,18 @@ from typing import List, Dict, Any, Optional
 # Add parent directory for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from espn import get_fixtures, get_team_stats, get_league_avg_goals
+from espn import get_fixtures, get_team_stats, get_league_avg_goals, get_team_history
 from poisson import calculate_gg_probability
 from shared.odds import analyze_market, clear_cache
+from shared.match_history import build_fixture_filter_stats
 from config import ALLOWED_LEAGUES
 from domain import (
     LeagueStats,
     TeamStats,
-    build_filter_stats,
     evaluate_filters,
     validate_poisson_inputs,
 )
+
 
 
 
@@ -150,7 +151,15 @@ def analyze_gg_match(
     #
     # `evaluate_filters` refuses to compare an absent statistic against a
     # threshold; it reports UNEVALUATED instead of inventing a value.
-    filter_result = evaluate_filters(build_filter_stats(home_stats, away_stats))
+    #
+    # Epic 1B.4 supplies the clean-sheet feed. `build_fixture_filter_stats`
+    # derives each team's rate from completed ESPN league matches kicking off
+    # strictly before this fixture - home team at home, away team away - and
+    # main.py calls the identical function with the identical arguments.
+    filter_result = evaluate_filters(
+        build_fixture_filter_stats(fixture, home_stats, away_stats, get_team_history)
+    )
+
 
     passes_filters = filter_result.passed
     filter_reasons = filter_result.reasons
