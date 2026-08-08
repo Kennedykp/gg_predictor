@@ -189,10 +189,55 @@ def test_d4_goals_average_semantics_disagreement():
 
 
 @pytest.mark.spec
-@pytest.mark.skip(
-    reason="D5 UNRESOLVED: GG.md treats league average goals as a required model "
-    "input, but espn.get_league_avg_goals() always returns the hardcoded 1.35 "
-    "because /standings returns an empty body. Fix belongs to Epic 1B."
-)
-def test_d5_league_average_is_always_fallback_disagreement():
-    raise AssertionError("placeholder - see docs/REPO_AUDIT.md D5")
+def test_d5_league_average_is_no_longer_always_the_fallback(monkeypatch):
+    """
+    D5 RESOLVED in Epic 1B.2 (GG-003).
+
+    GG.md treats the league average as a required model input, but the provider
+    returned the hardcoded 1.35 on every call: it requested
+    `/apis/site/v2/.../standings`, which answers HTTP 200 with a 2-byte `{}`, so
+    the 200 status meant nothing ever raised and the fallback always won.
+
+    Two things had to become true, and both are asserted here:
+      1. a real standings table is now computed rather than assumed, and
+      2. an unavailable table yields None rather than a plausible constant.
+    """
+    import espn
+
+    # 1. Real data is computed. 20 goals over 20 team-games = 1.0 per team per
+    #    match - deliberately not 1.35, so a lingering fallback cannot pass.
+    monkeypatch.setattr(
+        espn,
+        "_make_request",
+        lambda *a, **k: {
+            "children": [
+                {
+                    "standings": {
+                        "entries": [
+                            {
+                                "stats": [
+                                    {"name": "pointsFor", "value": 12},
+                                    {"name": "pointsAgainst", "value": 8},
+                                    {"name": "gamesPlayed", "value": 10},
+                                ]
+                            },
+                            {
+                                "stats": [
+                                    {"name": "pointsFor", "value": 8},
+                                    {"name": "pointsAgainst", "value": 12},
+                                    {"name": "gamesPlayed", "value": 10},
+                                ]
+                            },
+                        ]
+                    }
+                }
+            ]
+        },
+    )
+    assert espn.get_league_avg_goals("eng.1") == pytest.approx(1.0)
+
+    # 2. Unavailable is unavailable. Previously this exact path returned 1.35.
+    monkeypatch.setattr(espn, "_make_request", lambda *a, **k: None)
+    result = espn.get_league_avg_goals("eng.1")
+    assert result is None
+    assert result != 1.35

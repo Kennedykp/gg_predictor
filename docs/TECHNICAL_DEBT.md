@@ -1,8 +1,21 @@
 # GG Predictor — Technical Debt Register (as of `be67223`)
 
-Prioritised. Nothing here has been implemented — recommendations are for Epic 1 onward.
+Prioritised. Items marked ✅ RESOLVED were fixed in the Epic named on the heading; everything else is
+still open and the recommendation stands. Original problem text is kept verbatim under each resolved
+item — resolutions are **appended, not substituted**, so the history stays readable.
 
-**Counts:** 4 CRITICAL (1 RESOLVED) · 6 HIGH · 8 MEDIUM · 6 LOW · 1 leakage risk (counted within CRITICAL)
+**Counts:** 4 CRITICAL (2 RESOLVED) · 7 HIGH (1 RESOLVED) · 8 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
+· 1 leakage risk (counted within CRITICAL, open)
+
+**Status: 26 items tracked · 7 RESOLVED · 19 open.**
+
+| Epic | Resolved | Items |
+|---|---|---|
+| 1B.1 — data contracts | 1 | GG-001 |
+| 1B.2 — ESPN provider | 6 | GG-003, GG-004, GG-012, GG-013, GG-014, GG-020 |
+| **Total** | **7** | 19 remain open, incl. LEAK-001 and R3-001 |
+
+New in Epic 1B.2: **GG-024** (HIGH) — the ESPN team endpoint ignores `?season=`.
 
 ---
 
@@ -45,6 +58,11 @@ Prioritised. Nothing here has been implemented — recommendations are for Epic 
   GG-003 (league average still fabricated inside the provider, so callers cannot attribute it — hence
   the `UNATTRIBUTED` source), GG-004 (home/away counts still halved). Each changes production output
   and needs its own sub-epic.
+  - **Update (Epic 1B.2):** GG-003 and GG-004 are now resolved — see below. **GG-002 remains open:**
+    ESPN supplies no clean-sheet data at all, so the hardcoded `0`s are still in `espn.py`. They were
+    left deliberately: the domain contract can already represent them as unavailable, but switching
+    them would make every fixture fail the clean-sheet filter and change production output, which is
+    GG-002's job, not this sub-epic's.
 
 ### GG-002 — Four of five documented hard filters cannot fire
 - **Component:** Filters + provider + entry points
@@ -63,7 +81,7 @@ Prioritised. Nothing here has been implemented — recommendations are for Epic 
 - **Future action:** Source real clean-sheet data (`api_football.py` and `sportmonks.py` already
   compute it), derive the three flags from fixture metadata, and correct the goals-average input.
 
-### GG-003 — League average goals is always the hardcoded `1.35`
+### GG-003 — League average goals is always the hardcoded `1.35` — ✅ RESOLVED (Epic 1B.2)
 - **Component:** ESPN provider
 - **Problem:** The `/standings` endpoint returns HTTP 200 with an empty body, so every call falls
   through to the fallback constant. Because the status code is 200, nothing errors or logs.
@@ -81,6 +99,33 @@ Prioritised. Nothing here has been implemented — recommendations are for Epic 
   for Strasbourg vs Metz is not a plausible expected-goals figure.
 - **Future action:** Compute the league average from a working endpoint or a stored historical table.
   On failure, return an explicit unavailable state — never a plausible constant.
+- **RESOLVED — Epic 1B.2.** The root cause was a **wrong endpoint path**, not merely a bad fallback.
+  - **Wrong address, right question.** `/apis/site/v2/sports/soccer/{league}/standings` answers
+    **HTTP 200 with a 2-byte body `{}`** (verified live). Because the status was 200 nothing raised,
+    so every call fell silently through to the constant — no error, no log, no signal.
+  - The working path is `/apis/v2/sports/soccer/{league}/standings` (note: **no `/site` segment**),
+    verified live returning ~68KB of real standings. Added as `config.ESPN_STANDINGS_BASE_URL`.
+  - The `1.35` fallback is removed from `espn.get_league_avg_goals()` **and from both callers**
+    (`main.py`, `analyze_all.py`). `analyze_all.py`'s `or 1.35` was **doubly wrong**: `or` is a
+    truthiness test, so it also replaced a genuine `0.0` with the constant.
+  - Unavailable now returns `None`, which `validate_poisson_inputs()` refuses (the Epic 1B.1
+    contract). The fixture yields **no prediction** rather than one scaled by an invented denominator.
+  - **The constant was not merely unsourced — it was wrong.** Measured EPL 2025-26: **1.3750**
+    (1045 goals / 760 team-games). Being close enough to look plausible is precisely why it survived
+    undetected through every previous review.
+  - Units are pinned in the docstring: goals per **team** per match. A standings table counts each
+    fixture twice, so summing `gamesPlayed` gives team-games; using the per-fixture figure (2.7500)
+    would have halved every λ.
+  - **Integrity checks added:** league-wide goals scored must equal goals conceded (every goal is
+    both — a mismatch means a truncated or inconsistent table; verified live EPL 1045 == 1045), and a
+    partial table (any team missing `pointsFor`/`gamesPlayed`) is refused rather than averaged. A
+    preseason table with zero matches played returns `None`, not `0`.
+  - Spec disagreement **D5 is resolved**; covered by a regression test.
+  - **Verification:** 1129 tests pass (3 skipped — the unresolved D1/D3/D4 spec decisions), ruff and
+    mypy clean. The frozen POISSON_V1 golden regression file is untouched.
+    New coverage: `tests/unit/test_espn_league_average.py`, `tests/unit/test_espn_transport.py`,
+    `tests/unit/test_espn_provider.py`. Live re-verification: `scripts/espn_diagnostic.py`, which
+    probes both paths side by side so the 200-with-`{}` failure is reproducible on demand.
 
 ### R3-001 — Run-3 is mathematically incapable of producing a selection
 - **Component:** Run-3 decision logic
@@ -125,13 +170,24 @@ Prioritised. Nothing here has been implemented — recommendations are for Epic 
 
 ## HIGH
 
-### GG-004 — Home/away match counts fabricated by halving
+### GG-004 — Home/away match counts fabricated by halving — ✅ RESOLVED (Epic 1B.2)
 - **Component:** ESPN provider · **Evidence:** `espn.py:117-118`, `main_run3.py:166-167`,
   `sofascore.py:134-145` (which halves goals and clean sheets too).
 - **Impact:** Home/away schedules are genuinely uneven. Live-verified: Aalesund 9 home vs 6 away;
   AIK 7 vs 8; Athletico-PR 11 vs 10. Halving distorts every per-match rate fed to λ.
 - **Future action:** Use the real split counts (they are present in the API response); fail explicitly
   when absent.
+- **RESOLVED — Epic 1B.2.** ESPN **does** supply `homeGamesPlayed`/`awayGamesPlayed` (confirmed live
+  on the team endpoint), so the real counts are now used and the `matches_played / 2` fabrication is
+  removed from `espn.py`.
+  - A missing count yields `None` — absence is absence, not a guess.
+  - **A split with 0 games played yields `None`, not `0.0`.** Zero matches means the rate is
+    UNDEFINED. Reporting `0.0` would assert "this team scores zero per home match", which is a
+    different and much stronger claim than "this team has not played at home yet".
+  - `home_matches`/`away_matches` are returned alongside the rates, so a caller can see the split it
+    actually received rather than inferring one.
+  - **Scope:** `espn.py` only. `run3/main_run3.py:166-167` and `sofascore.py:134-145` still halve
+    (the duplication tracked as GG-010); both remain dead or out-of-path for the ESPN pipeline.
 
 ### GG-005 — Only season-long cumulative stats; no form or recency
 - **Component:** ESPN provider · **Evidence:** `espn.py:83-133` reads only `record.items[0]` totals.
@@ -173,6 +229,28 @@ Prioritised. Nothing here has been implemented — recommendations are for Epic 
 - **Future action:** Normalise league identifiers behind the provider interface; add a smoke test that
   asserts a non-empty result for a known-populated date.
 
+### GG-024 — ESPN team endpoint ignores the `season` parameter
+- **Component:** ESPN provider · **Discovered:** Epic 1B.2
+- **Problem:** `/{league}/teams/{id}` serves **current-season cumulative totals only**. The `season`
+  query parameter is accepted without error and has no effect on the response.
+- **Evidence:** Live read-only verification during the 2026-27 preseason: the same team endpoint
+  requested **with** `season=2025` and **without** any season parameter returned the same record,
+  both reporting `gamesPlayed = 0.0`. Had the parameter been honoured, `season=2025` would have
+  returned the completed 2025-26 totals. Reproducible via `scripts/espn_diagnostic.py`.
+  Note the contrast: the **standings** endpoint (`ESPN_STANDINGS_BASE_URL`) *does* honour `season`,
+  so the two ESPN endpoints disagree on whether the parameter means anything.
+- **Impact:** Team statistics are **current-season-only**, so **historical backtesting cannot use this
+  endpoint** — there is no way to ask it what a team's record was at a past point. This is the
+  mechanism underlying LEAK-001: `get_team_stats()` has no temporal argument because the API has no
+  temporal dimension to pass it to. Adding an `as_of` parameter here would produce a signature that
+  *looks* point-in-time while silently returning today's figures — worse than the current honest gap.
+  Separately, during preseason **every team returns zeros**; since Epic 1B.2 that correctly yields
+  **no prediction** (`matches_played == 0` → `None`) rather than a fabricated one, so the failure is
+  now loud instead of silent.
+- **Future action:** Do not attempt historical work through this endpoint. Point-in-time team stats
+  must come from stored fixture-level history (see LEAK-001 and GG-005), which is the prerequisite for
+  any model comparison or backtest.
+
 ---
 
 ## MEDIUM
@@ -186,20 +264,62 @@ Bug fixes must be applied twice; the two copies can drift silently.
 Sibling imports (`from run3_probability import …`) with no package. `cd run3` is mandatory and
 undocumented outside `run3/README.md`. **Action:** proper package + console entry point.
 
-### GG-012 — No rate limiting, retry or backoff anywhere
+### GG-012 — No rate limiting, retry or backoff anywhere — ✅ RESOLVED (Epic 1B.2)
 `espn.py`, `odds_api.py`, `shared/odds.py`, `main_run3.py` all issue single attempts. Run-3 makes
 hundreds of sequential requests across 36 leagues. A throttled response is indistinguishable from
 "no data" because of GG-001. **Action:** shared HTTP client with retry, backoff and rate limiting.
 
-### GG-013 — Fixture status is never checked
+**RESOLVED — Epic 1B.2** (ESPN provider). `espn.py` now routes every request through one `_fetch()`
+with an explicit `ESPN_TIMEOUT_SECONDS = 15` (previously an implicit 30s, and no timeout at all is a
+hang) and a **bounded** retry: `ESPN_MAX_RETRIES = 2` (3 attempts total) with exponential backoff from
+`ESPN_BACKOFF_SECONDS = 0.5`. Bounded deliberately — unbounded retry converts a permanent outage into
+a hang, and hammering a free endpoint is its own failure mode.
+
+Retry is applied **only to transient failures** — timeout, connection error, and 5xx. **4xx and
+malformed JSON are permanent and are not retried**: a 404 never becomes a 200, so repeating it only
+wastes time and quota. Failure modes are now named rather than collapsed (`ESPNError`: `TIMEOUT`,
+`CONNECTION`, `SERVER_ERROR`, `HTTP_ERROR`, `MALFORMED_JSON`, `EMPTY_RESPONSE`), which closes the
+GG-001 ambiguity this item flagged: a throttled or empty response is no longer indistinguishable from
+"no data". `EMPTY_RESPONSE` is the named GG-003 signature — HTTP 200 with `{}`.
+
+**Scope — still open:** `odds_api.py`, `shared/odds.py` and `run3/main_run3.py` remain single-attempt
+`timeout=30` calls, and **no rate limiting is implemented anywhere**. The shared HTTP client in the
+original action is not built; only the ESPN path is hardened. Covered by
+`tests/unit/test_espn_transport.py` (45 tests).
+
+### GG-013 — Fixture status is never checked — ✅ RESOLVED (Epic 1B.2)
 `espn.py:69` captures `status`; nothing reads it. Finished, postponed, abandoned and in-play matches
 are all predicted as if upcoming. **Action:** filter on status; treat non-scheduled as excluded.
 
-### GG-014 — Timezone and date-parsing weaknesses
+**RESOLVED — Epic 1B.2** (provider side). Each fixture now exposes `state` (`pre`/`in`/`post`, from
+ESPN's `status.type.state`), `is_completed`, and `is_postponed`. `espn.is_predictable(fixture)` returns
+True **only** for a match that has not started and is still expected to happen. `state` alone is
+insufficient — a postponed match still reports state `pre` — so cancelled/abandoned/postponed status
+names are matched explicitly. This matters because a finished match's statistics already contain that
+result, so "predicting" it is predicting a known outcome. Existing fixture keys are unchanged, so
+current consumers keep working.
+
+**Honest status — remaining work:** this is now **available to callers but not yet used by them.**
+`main.py` and `analyze_all.py` do **not** filter on `is_predictable()` yet, so in practice finished and
+postponed matches still reach the model. The capability exists and is tested; wiring it into the entry
+points is outstanding.
+
+### GG-014 — Timezone and date-parsing weaknesses — ✅ RESOLVED (Epic 1B.2)
 ESPN returns UTC (`2026-01-17T12:30Z`); `date.today()` is local (machine UTC+1). Fixtures near midnight
 land on the wrong day. Datetimes are stored as raw strings and never parsed. SofaScore uses Unix
 timestamps — a third representation. **Action:** timezone-aware datetimes end to end; explicit
 local-vs-UTC decision for "matchday".
+
+**RESOLVED — Epic 1B.2** (provider side). `espn.parse_kickoff()` parses ESPN's trailing-`Z` timestamps
+into **timezone-aware UTC** datetimes, exposed on each fixture as `kickoff_utc`; an unparseable value
+returns `None` rather than a wrong instant. Aware rather than naive on purpose: a naive datetime
+compares silently against local time, and on a UTC+1 machine a 23:30Z kickoff lands on the wrong
+matchday. The raw `datetime` string is retained unchanged for existing consumers.
+
+**Honest status — remaining work:** as with GG-013, `kickoff_utc` is **available but not yet used.**
+Neither entry point buckets matchdays by it — `date.today()` is still local — so the near-midnight
+boundary error is not yet fixed end to end. The explicit local-vs-UTC "matchday" decision is still
+owed. SofaScore's Unix timestamps are untouched (dead code, GG-018).
 
 ### GG-015 — No duplicate-fixture protection
 Nothing deduplicates by fixture ID. A team appearing in two whitelisted competitions on one date is
@@ -230,9 +350,18 @@ No levels, no structure, no destination control, no run ID. Makes production mon
 Minor security note: The Odds API takes the key as a **query parameter**, so a printed `requests`
 exception can embed `apiKey=…`. **Action:** `logging` with redaction.
 
-### GG-020 — Insecure HTTP for ESPN
+### GG-020 — Insecure HTTP for ESPN — ✅ RESOLVED (Epic 1B.2)
 `config.py:14` and `run3/main_run3.py:37` use `http://`. Traffic is unauthenticated but plaintext and
 MITM-modifiable, and a tampered response feeds the model directly. **Action:** switch to `https://`.
+
+**RESOLVED — Epic 1B.2.** `config.ESPN_BASE_URL` and the new `config.ESPN_STANDINGS_BASE_URL` are both
+`https://`, verified working over TLS for every endpoint the pipeline uses. A regression test asserts
+both start with `https://` **and** that neither contains the substring `http://` — `startswith` alone
+would miss an embedded downgrade (`tests/unit/test_espn_provider.py`).
+
+**Scope — still open:** `run3/main_run3.py:37` still hardcodes `http://`. Run-3 keeps its own copy of
+the ESPN client (GG-010) and cannot currently produce a selection at all (R3-001), so it was left
+alone; the plaintext URL there is unfixed.
 
 ### GG-021 — Unresolved authored comments shipped to `main`
 `main.py:114` and `:118` contain uncertainty notes
@@ -252,15 +381,26 @@ output directory; `git rm --cached` the artefacts.
 
 ## Summary by component
 
+✅ = resolved.
+
 | Component | CRITICAL | HIGH | MEDIUM | LOW |
 |---|---|---|---|---|
-| ESPN provider | GG-001, GG-003 | GG-004, GG-005 | GG-012, GG-013, GG-014 | GG-020 |
+| ESPN provider | ✅ GG-001, ✅ GG-003 | ✅ GG-004, GG-005, GG-024 | ✅ GG-012, ✅ GG-013, ✅ GG-014 | ✅ GG-020 |
 | Filters / entry points | GG-002 | GG-006 | GG-015 | GG-021 |
 | Run-3 | R3-001 | — | GG-010, GG-011 | — |
 | Odds | — | GG-007, GG-008 | GG-016, GG-017 | GG-019 |
 | Dead providers | — | GG-009 | — | GG-018 |
 | Storage / evaluation | LEAK-001 | — | — | — |
 | Tooling | — | — | — | GG-022, GG-023 |
+
+**Open by severity (19 total):** 2 CRITICAL (GG-002, R3-001) + LEAK-001 · 6 HIGH (GG-005, GG-006,
+GG-007, GG-008, GG-009, GG-024) · 5 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017) · 5 LOW (GG-018,
+GG-019, GG-021, GG-022, GG-023).
+
+**Carried forward from Epic 1B.2** (capability landed, not yet consumed): GG-013 and GG-014 are
+resolved in the provider but `main.py`/`analyze_all.py` do not yet filter on `is_predictable()` or
+bucket matchdays by `kickoff_utc`. GG-012 hardened the ESPN path only — the odds clients and Run-3 are
+still single-attempt and nothing implements rate limiting. GG-020 left `run3/main_run3.py` on `http://`.
 
 **Also outstanding, tracked in `REPO_AUDIT.md` §7 rather than here** (they are decisions, not defects):
 the five documented-vs-implemented disagreements D1–D5 between `GG.md` and the code, plus the Run-3

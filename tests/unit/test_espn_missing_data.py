@@ -181,6 +181,10 @@ class TestCompleteResponseUnchanged:
             "away_clean_sheet_pct": 0,
             "total_goals_avg": 2.5,
             "matches_played": 20,
+            # Epic 1B.2: the real ESPN split counts, now exposed. Added keys
+            # only - every rate above is byte-identical to the pre-fix values.
+            "home_matches": 10,
+            "away_matches": 10,
         }
 
 
@@ -208,29 +212,41 @@ class TestMatchesPlayedGating:
 @pytest.mark.characterization
 class TestLegacyHomeAwaySplitHalving:
     """
-    CHARACTERIZATION — GG-004, deliberately NOT fixed in Epic 1B.1.
+    TRANSITIONED in Epic 1B.2 — GG-004 is now RESOLVED.
 
-    When ESPN omits the home/away match counts the provider substitutes
-    `matches_played / 2`. That is a fabricated split, and it is exactly the class
-    of silent invention this sub-epic is about — but correcting it changes match
-    counts and therefore every rate, so it is out of scope here and is left
-    untouched. Pinned so the behaviour is visible and so Epic 1B.2 has a target.
+    These two tests previously pinned the legacy behaviour: when ESPN omitted the
+    home/away match counts the provider substituted `matches_played / 2`. That
+    was fabricated data, and the class was written to keep it visible until this
+    sub-epic could remove it.
+
+    The assertions are inverted rather than deleted, so the file still documents
+    the defect and now proves it cannot return. ESPN does supply
+    homeGamesPlayed/awayGamesPlayed (confirmed live), so a missing count means
+    the rate is genuinely unavailable.
     """
 
-    def test_absent_home_games_played_is_still_halved(self, espn_returning):
+    def test_absent_home_games_played_is_no_longer_halved(self, espn_returning):
+        """The divisor is absent, so the rate is unavailable - not 18/(20/2)."""
         espn_returning(build_payload(stats_without("homeGamesPlayed")))
         stats = espn.get_team_stats("1", "eng.1")
         assert stats is not None
-        # 18 home goals / (20 / 2) rather than the true 18 / 10.
-        assert stats["home_goals_scored"] == pytest.approx(1.8)
+        assert stats["home_goals_scored"] is None
+        assert stats["home_goals_scored"] != pytest.approx(1.8)
 
-    def test_halving_is_wrong_when_the_true_split_is_uneven(self, espn_returning):
+    def test_missing_split_is_unavailable_rather_than_an_assumed_even_split(
+        self, espn_returning
+    ):
         """
-        A team having played 14 home and 6 away matches is normal mid-season.
-        The halving asserts 10/10 and silently distorts both rates.
+        A team having played 14 home and 6 away matches is normal mid-season, so
+        assuming 10/10 silently distorted both rates. The provider now declines
+        to guess: absence is reported as absence and the fixture is refused
+        upstream by validate_poisson_inputs().
         """
         uneven = [s for s in FULL_STATS if s["name"] not in ("homeGamesPlayed",)]
         espn_returning(build_payload(uneven))
         stats = espn.get_team_stats("1", "eng.1")
         assert stats is not None
-        assert stats["home_goals_scored"] == pytest.approx(18 / 10.0)
+        assert stats["home_goals_scored"] is None
+        assert stats["home_matches"] is None
+        # The away side was untouched and must still be computed normally.
+        assert stats["away_goals_scored"] == pytest.approx(1.2)
