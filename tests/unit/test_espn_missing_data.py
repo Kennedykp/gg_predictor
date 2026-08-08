@@ -177,10 +177,15 @@ class TestCompleteResponseUnchanged:
             "away_goals_scored": 1.2,
             "home_goals_conceded": 0.8,
             "away_goals_conceded": 1.2,
-            "home_clean_sheet_pct": 0,
-            "away_clean_sheet_pct": 0,
+            # TRANSITIONED (Epic 1B.3, GG-002). These asserted 0, which was the
+            # hardcoded value, not a measurement. ESPN's standings record cannot
+            # yield a clean-sheet count - conceding 5 over 5 games is consistent
+            # with 0 or 4 clean sheets - so the honest value is None.
+            "home_clean_sheet_pct": None,
+            "away_clean_sheet_pct": None,
             "total_goals_avg": 2.5,
             "matches_played": 20,
+
             # Epic 1B.2: the real ESPN split counts, now exposed. Added keys
             # only - every rate above is byte-identical to the pre-fix values.
             "home_matches": 10,

@@ -26,10 +26,16 @@ from config import ALLOWED_LEAGUES
 from espn import get_fixtures, get_team_stats, get_league_avg_goals
 from odds_api import get_btts_odds
 from poisson import calculate_gg_probability
-from filters import apply_filters
 from decision import make_decision
 from output import print_results, write_csv, write_json
-from domain import LeagueStats, TeamStats, validate_poisson_inputs
+from domain import (
+    LeagueStats,
+    TeamStats,
+    build_filter_stats,
+    evaluate_filters,
+    validate_poisson_inputs,
+)
+
 
 
 def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[str, Any]:
@@ -110,35 +116,26 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
     result["lambda_away"] = poisson_result["lambda_away"]
     result["gg_probability"] = poisson_result["gg_probability"]
 
-    # Apply hard filters.
-    # Filter inputs can now be None (GG-001), and comparing None against a
-    # threshold raises TypeError. When an input is unavailable the filter cannot
-    # be evaluated, so the fixture is rejected as unreliable data - the same
-    # outcome apply_filters() produces for has_reliable_data=False, reached
-    # without inventing a number to compare. Thresholds are untouched.
-    filter_inputs = (
-        home_stats.get("total_goals_avg"),
-        away_stats.get("total_goals_avg"),
-        home_stats.get("home_clean_sheet_pct"),
-        away_stats.get("away_clean_sheet_pct"),
-    )
+    # Apply hard filters through the single shared boundary (GG-006).
+    #
+    # This previously passed `total_goals_avg` - goals SCORED PLUS CONCEDED -
+    # into a parameter documented as the team's goals-scored average, while
+    # analyze_all.py passed the scoring rate. Same fixture, two verdicts. A side
+    # scoring 5 and conceding 30 in 20 games has a scoring rate of 0.25 (a clear
+    # fail) but a combined average of 1.75 (a comfortable pass), so the filter
+    # was passing exactly the teams it exists to exclude.
+    #
+    # `build_filter_stats` is now the only place either entry point decides what
+    # a filter input means. Thresholds are untouched.
+    filter_result = evaluate_filters(build_filter_stats(home_stats, away_stats))
 
-    if any(value is None for value in filter_inputs):
-        passes_filters, filter_reasons = False, ["Missing or unreliable data"]
-    else:
-        passes_filters, filter_reasons = apply_filters(
-            home_avg_goals=filter_inputs[0],
-            away_avg_goals=filter_inputs[1],
-            home_clean_sheet_pct=filter_inputs[2],
-            away_clean_sheet_pct=filter_inputs[3],
-            is_knockout_first_leg=False,
-            is_heavy_favorite_mismatch=False,
-            has_reliable_data=True,
-        )
+    result["passes_filters"] = filter_result.passed
+    result["filter_outcome"] = filter_result.outcome.value
+    if filter_result.unavailable_fields:
+        result["filter_data_unavailable"] = list(filter_result.unavailable_fields)
+    if not filter_result.passed:
+        result["rejection_reasons"].extend(filter_result.reasons)
 
-    result["passes_filters"] = passes_filters
-    if not passes_filters:
-        result["rejection_reasons"].extend(filter_reasons)
 
     # Fetch odds (optional)
     # Note: get_btts_odds might need update for ESPN IDs or just use names (it uses names)
@@ -150,11 +147,19 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
     result["odds"] = odds
 
     # Make decision
+    # TASK 18. The probability above is already recorded on `result` and stays
+    # there regardless of what happens here: POISSON_V1 had all five of its
+    # inputs, so the number is real and is reported. What an unevaluated filter
+    # blocks is the RECOMMENDATION, not the calculation.
+    #
+    # `allows_recommendation` is True only for an explicit PASS, so both FAILED
+    # and UNEVALUATED reach make_decision as False and yield NO BET.
     decision_result = make_decision(
         gg_probability=result["gg_probability"],
         odds=odds,
-        passes_filters=passes_filters,
+        passes_filters=filter_result.allows_recommendation,
     )
+
 
     result["implied_probability"] = decision_result.get("implied_probability")
     result["edge"] = decision_result.get("edge")

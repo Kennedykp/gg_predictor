@@ -13,10 +13,34 @@ immutable value objects and keeps the dependency surface unchanged.
 
 The pipeline still passes provider dicts around; `from_provider_dict` adapters
 bridge to these contracts without forcing a repo-wide restructure.
+
+Epic 1B.3 adds the filter-side equivalents (GG-002): `FilterStats` carries the
+inputs the hard filters compare against thresholds, and `evaluate_filters` is
+the single boundary both entry points use, so they cannot interpret the same
+statistic differently (GG-006).
 """
 
 from domain.availability import DataQuality, is_available, missing_fields
+from domain.filter_evaluation import (
+    FILTER_DATA_UNAVAILABLE,
+    FilterOutcome,
+    FilterResult,
+    evaluate_filters,
+)
+from domain.filter_stats import (
+    REQUIRED_FILTER_FIELDS,
+    FilterStats,
+    StatSource,
+    build_filter_stats,
+)
 from domain.fixture import Fixture
+from domain.match_records import (
+    MatchRecord,
+    Venue,
+    both_teams_scored_pct,
+    clean_sheet_pct,
+    completed_matches,
+)
 from domain.stats import (
     LEGACY_FALLBACK_LEAGUE_AVERAGE,
     LeagueAverageSource,
@@ -46,4 +70,20 @@ __all__ = [
     "InputValidation",
     "validate_poisson_inputs",
     "REQUIRED_POISSON_INPUTS",
+    # filter inputs (Epic 1B.3)
+    "FilterStats",
+    "StatSource",
+    "build_filter_stats",
+    "REQUIRED_FILTER_FIELDS",
+    # filter evaluation (Epic 1B.3)
+    "evaluate_filters",
+    "FilterResult",
+    "FilterOutcome",
+    "FILTER_DATA_UNAVAILABLE",
+    # exact match-level derivations (Epic 1B.3)
+    "MatchRecord",
+    "Venue",
+    "clean_sheet_pct",
+    "both_teams_scored_pct",
+    "completed_matches",
 ]

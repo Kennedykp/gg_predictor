@@ -349,13 +349,30 @@ def get_team_stats(team_id: str, league_code: str) -> Optional[Dict[str, Any]]:
         "away_goals_scored": rate(away_goals_scored, away_matches),
         "home_goals_conceded": rate(home_goals_conceded, home_matches),
         "away_goals_conceded": rate(away_goals_conceded, away_matches),
-        # LEGACY (GG-002) — ESPN supplies no clean-sheet data at all, so these
-        # are hardcoded. Left as 0 deliberately: the contract in domain/stats.py
-        # can represent them as unavailable, but switching them here would make
-        # every fixture fail the filter and change production output, which is
-        # GG-002's job, not this sub-epic's.
-        "home_clean_sheet_pct": 0,
-        "away_clean_sheet_pct": 0,
+        # GG-002 RESOLVED (Epic 1B.3). These were hardcoded to 0, which asserted
+        # "this team has never kept a clean sheet" for every team in every
+        # league. The clean-sheet filter fires on `> 0.40`, so a constant 0 could
+        # not fire, ever - the filter existed but was unreachable.
+        #
+        # None is the correct value because the statistic is genuinely
+        # UNAVAILABLE from this endpoint, and provably so rather than by
+        # omission. The standings record supplies season AGGREGATES
+        # (pointsAgainst, gamesPlayed); a clean sheet is a per-match event.
+        # Conceding 5 across 5 matches is consistent with 0 clean sheets
+        # (1,1,1,1,1) and with 4 (5,0,0,0,0). The aggregate does not determine
+        # the answer, so no exact derivation exists from what we fetch here.
+        #
+        # Consequence, accepted deliberately: fixtures now report
+        # FILTER_DATA_UNAVAILABLE and are not recommended. That is the intended
+        # outcome. A filter that cannot be evaluated must not be treated as
+        # passed, and the previous behaviour was not "filter passing" but
+        # "filter disabled while appearing to pass".
+        #
+        # The exact derivation is implemented in domain/match_records.py and
+        # needs per-match results. See docs/EPIC_1B3_FILTER_WIRING.md.
+        "home_clean_sheet_pct": None,
+        "away_clean_sheet_pct": None,
+
         "total_goals_avg": total_goals_avg,
         "matches_played": matches_played,
         # Epic 1B.2: real counts, exposed so callers can see the split they got.
