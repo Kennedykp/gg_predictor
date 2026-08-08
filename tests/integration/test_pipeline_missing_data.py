@@ -229,18 +229,66 @@ class TestMainRefusesIncompleteData:
 
     def test_no_typeerror_when_filter_inputs_are_unavailable(self, espn_stats, generous_odds):
         """
-        `total_goals_avg` can now be None, and `None < 1.0` raises TypeError.
-        The fixture must be rejected cleanly instead of crashing the run.
+        A filter input can be None, and `None < 1.0` raises TypeError. The
+        fixture must be rejected cleanly instead of crashing the run.
+
+        TRANSITIONED (Epic 1B.3). The trigger changed. It used to remove
+        `pointsFor` to kill `total_goals_avg`, because main.py fed that combined
+        figure to the goals filter; after GG-006 the filter reads the home team's
+        home scoring rate instead, so `total_goals_avg` no longer reaches it.
+
+        Removing `homePointsFor` kills that scoring rate - but it is ALSO the
+        POISSON_V1 input `home_goals_scored_home`, so validation refuses the
+        fixture first and the filters are never reached. That ordering is correct
+        and worth pinning: there is no point evaluating betting filters on a
+        fixture the model itself cannot price. The filter-only failure mode is
+        covered by the clean-sheet test below.
         """
         espn_stats(
             {
-                "359": payload(without("pointsFor")),  # kills total_goals_avg only
+                "359": payload(without("homePointsFor")),
                 "360": payload(FULL_STATS),
             }
         )
         result = main.process_fixture(FIXTURE, league_avg_goals=1.35)
 
         assert result["passes_filters"] is False
-        assert "Missing or unreliable data" in result["rejection_reasons"]
-        # The five model inputs were intact, so the model still ran.
+        assert result["decision"] == "NO BET"
+        # Refused at the model-input gate, naming the field - no TypeError.
+        assert any("home_goals_scored_home" in r for r in result["rejection_reasons"])
+        assert result["gg_probability"] is None
+
+
+    def test_clean_sheet_unavailability_blocks_recommendation_but_not_probability(
+        self, espn_stats, generous_odds
+    ):
+        """
+        TASK 18 / TASK 10, on a COMPLETE ESPN response.
+
+        This is the live consequence of GG-002 being fixed. ESPN supplies every
+        POISSON_V1 input but no clean-sheet data, so:
+
+            model inputs complete   -> probability IS calculated and reported
+            filter inputs missing   -> NO recommendation
+
+        Before Epic 1B.3 the clean-sheet rates arrived as a hardcoded 0, the
+        filter silently passed, and this fixture could be recommended on a
+        statistic nobody had ever measured.
+        """
+        espn_stats({"359": payload(FULL_STATS), "360": payload(FULL_STATS)})
+        result = main.process_fixture(FIXTURE, league_avg_goals=1.35)
+
+        # The model ran: all five inputs were present.
         assert result["gg_probability"] is not None
+        assert 0.0 <= result["gg_probability"] <= 1.0
+        assert result["lambda_home"] is not None
+
+        # The recommendation did not.
+        assert result["passes_filters"] is False
+        assert result["filter_outcome"] == "UNEVALUATED"
+        assert result["decision"] == "NO BET"
+        assert set(result["filter_data_unavailable"]) == {
+            "home_clean_sheet_pct",
+            "away_clean_sheet_pct",
+        }
+

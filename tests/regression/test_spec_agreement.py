@@ -17,6 +17,7 @@ import pytest
 
 from config import EDGE_THRESHOLD, MAX_CLEAN_SHEET_PCT, MIN_AVG_GOALS, MIN_ODDS
 from decision import calculate_edge, calculate_implied_probability
+from domain import build_filter_stats, evaluate_filters
 from poisson import calculate_gg_probability
 
 
@@ -169,23 +170,46 @@ def test_d2_missing_data_now_blocks_the_prediction():
 
 @pytest.mark.spec
 @pytest.mark.skip(
-    reason="D3 UNRESOLVED: GG.md calls the five hard filters mandatory, but three are "
-    "hardcoded off in main.py and clean-sheet rates are hardcoded to 0 in espn.py. "
-    "Characterized in tests/unit/test_filters.py; fix belongs to Epic 1B."
+    reason="D3 PARTIALLY RESOLVED in Epic 1B.3. The clean-sheet half is fixed: the "
+    "hardcoded 0 is gone and unavailable data now blocks a recommendation instead "
+    "of silently passing (see TestCleanSheetDataCannotSilentlyPass). What remains "
+    "is that two of the five GG.md filters - first-leg knockout and heavy-favourite "
+    "mismatch - have no data source at all, so they still cannot fire. That needs a "
+    "competition-format/market feed, not a wiring change. Tracked as GG-002-B."
 )
 def test_d3_filters_mandatory_but_disabled_disagreement():
     raise AssertionError("placeholder - see docs/REPO_AUDIT.md D3")
 
 
 @pytest.mark.spec
-@pytest.mark.skip(
-    reason="D4 UNRESOLVED: GG.md says 'one team averages < 1.0 goal' (goals scored), "
-    "but main.py passes combined goals-per-match and analyze_all.py passes the "
-    "home-only scoring rate into the same parameter. Needs a decision on the "
-    "intended quantity."
-)
-def test_d4_goals_average_semantics_disagreement():
-    raise AssertionError("placeholder - see docs/REPO_AUDIT.md D4")
+def test_d4_goals_average_semantics_resolved():
+    """
+    D4 / GG-006 RESOLVED in Epic 1B.3.
+
+    GG.md section 9 says "one team averages < 1.0 goal". main.py used to pass
+    `total_goals_avg` - goals scored PLUS conceded - while analyze_all.py passed
+    the team's scoring rate, into the same parameter. Both entry points now route
+    through `build_filter_stats`, so the quantity is fixed in one place: goals
+    SCORED by that team, at the venue it is playing at.
+
+    The worked example below is the disagreement made concrete. It is the same
+    team under both readings, and the two readings give opposite verdicts.
+    """
+    goals_for, goals_against, matches = 5, 30, 20
+    scoring_rate = goals_for / matches                      # 0.25 - the correct input
+    combined = (goals_for + goals_against) / matches        # 1.75 - the old main.py input
+
+    assert scoring_rate < MIN_AVG_GOALS, "a team scoring 0.25/game must fail the filter"
+    assert combined > MIN_AVG_GOALS, "the combined figure passes, which was the defect"
+
+    home = {"home_goals_scored": scoring_rate, "home_clean_sheet_pct": 0.10}
+    away = {"away_goals_scored": 1.40, "away_clean_sheet_pct": 0.20}
+
+    result = evaluate_filters(build_filter_stats(home, away))
+
+    assert result.passed is False, "the scoring rate is what reaches the threshold now"
+    assert any("Home team averages" in r for r in result.reasons)
+
 
 
 @pytest.mark.spec

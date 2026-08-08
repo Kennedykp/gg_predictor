@@ -531,9 +531,101 @@ def check_league_avg(league: str, season: int) -> list[tuple[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# 5. Filter statistics (Epic 1B.3, TASK 21)
+# ---------------------------------------------------------------------------
+def check_filter_stats(league: str, team_ref: dict | None) -> list[tuple[str, str]]:
+    """
+    Report which GG hard-filter statistics ESPN can actually supply.
+
+    This answers TASK 4 against the live API rather than from documentation:
+    for each statistic, is it DIRECT (ESPN states it), DERIVED (computed exactly
+    from genuine ESPN data) or UNAVAILABLE (cannot be obtained honestly)?
+
+    One successful response proves a field exists for ONE team in ONE league at
+    ONE moment - not that it is universally available. The sample size is printed
+    alongside each value so a rate computed from two matches is not mistaken for
+    a settled one.
+    """
+    _heading("5. GG filter statistics - what can ESPN actually supply?")
+
+    if not team_ref:
+        print("    SKIPPED: no team reference available from earlier sections.")
+        print()
+        return [("filter statistics", "SKIPPED - no team available")]
+
+    team_id = str(team_ref.get("id", ""))
+    team_name = team_ref.get("displayName") or team_ref.get("name") or f"team {team_id}"
+
+    stats = espn.get_team_stats(team_id, league)
+    if stats is None:
+        print(f"    {team_name}: provider returned None - no usable record.")
+        print()
+        return [("filter statistics", "UNAVAILABLE - provider returned None")]
+
+    matches = stats.get("matches_played")
+    home_matches = stats.get("home_matches")
+    away_matches = stats.get("away_matches")
+
+    print(f"    team: {team_name}  (id={team_id}, league={league})")
+    print(f"    sample: {matches} matches played "
+          f"({home_matches} home, {away_matches} away)")
+    print()
+    print(f"    {'STATISTIC':<26} {'SOURCE':<12} {'VALUE':<12} SAMPLE")
+    print(f"    {'-' * 26} {'-' * 12} {'-' * 12} {'-' * 12}")
+
+    def _row(label: str, source: str, value: Any, sample: Any) -> None:
+        shown = "UNAVAILABLE" if value is None else (
+            f"{value:.4f}" if isinstance(value, float) else str(value)
+        )
+        sample_shown = "-" if sample is None else f"{sample} matches"
+        print(f"    {label:<26} {source:<12} {shown:<12} {sample_shown}")
+
+    # Goals scored/conceded: ESPN gives season TOTALS and the match counts, so
+    # the per-match rate is an exact division - genuinely DERIVED.
+    _row("home_avg_goals_scored", "DERIVED", stats.get("home_goals_scored"), home_matches)
+    _row("away_avg_goals_scored", "DERIVED", stats.get("away_goals_scored"), away_matches)
+    _row("home_goals_conceded", "DERIVED", stats.get("home_goals_conceded"), home_matches)
+    _row("away_goals_conceded", "DERIVED", stats.get("away_goals_conceded"), away_matches)
+
+    # Clean sheets: the standings record carries aggregate goals-against only.
+    # GA=5 over 5 matches is consistent with 0 clean sheets or with 4, so no
+    # exact derivation exists from this endpoint.
+    _row("home_clean_sheet_pct", "UNAVAILABLE", stats.get("home_clean_sheet_pct"), home_matches)
+    _row("away_clean_sheet_pct", "UNAVAILABLE", stats.get("away_clean_sheet_pct"), away_matches)
+
+    # BTTS history needs per-match scorelines, which this endpoint never returns.
+    _row("both_scored_pct", "UNAVAILABLE", None, None)
+
+    # Games played IS stated by ESPN, so it is DIRECT rather than derived.
+    _row("matches_played", "DIRECT", matches, None)
+
+    print()
+    print("    DIRECT      = ESPN states the statistic itself")
+    print("    DERIVED     = computed exactly from genuine ESPN totals + match counts")
+    print("    UNAVAILABLE = cannot be obtained honestly from this endpoint")
+    print()
+    print("    Clean-sheet and BTTS rates need MATCH-LEVEL results. The standings")
+    print("    record is aggregate-only: goals-against does not determine how many")
+    print("    matches ended with zero conceded. Approximating it would be exactly")
+    print("    the fabrication Epic 1B.3 removed, so both are reported UNAVAILABLE")
+    print("    and block a recommendation rather than silently passing the filter.")
+    print()
+
+    unavailable = sum(
+        1 for v in (stats.get("home_clean_sheet_pct"), stats.get("away_clean_sheet_pct")) if v is None
+    )
+    verdict = (
+        f"goals rates DERIVED ok; {unavailable + 1} filter stats UNAVAILABLE "
+        "(clean sheets, BTTS history)"
+    )
+    return [("filter statistics", verdict)]
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
+
     parser = argparse.ArgumentParser(
         prog="espn_diagnostic.py",
         description="Live ESPN endpoint diagnostic (manual only - makes real network calls).",
@@ -589,8 +681,11 @@ def main(argv: list[str] | None = None) -> int:
 
     # Prefer a team from the standings table (always a league member); fall back
     # to a team seen on the scoreboard.
-    summary += check_team(league, standings_team or scoreboard_team)
+    team_ref = standings_team or scoreboard_team
+    summary += check_team(league, team_ref)
     summary += check_league_avg(league, season)
+    summary += check_filter_stats(league, team_ref)
+
 
     _heading("SUMMARY")
     for label, verdict in summary:

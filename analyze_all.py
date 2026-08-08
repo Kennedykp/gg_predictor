@@ -21,10 +21,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from espn import get_fixtures, get_team_stats, get_league_avg_goals
 from poisson import calculate_gg_probability
-from filters import apply_filters
 from shared.odds import analyze_market, clear_cache
 from config import ALLOWED_LEAGUES
-from domain import LeagueStats, TeamStats, validate_poisson_inputs
+from domain import (
+    LeagueStats,
+    TeamStats,
+    build_filter_stats,
+    evaluate_filters,
+    validate_poisson_inputs,
+)
+
 
 
 def analyze_gg_match(
@@ -134,34 +140,30 @@ def analyze_gg_match(
     gg_yes_prob = prob_result["gg_probability"]
     gg_no_prob = 1 - gg_yes_prob
     
-    # Apply filters.
-    # NOTE (GG-006, out of scope): this passes single-side scoring rates into
-    # parameters named `*_avg_goals`, whereas main.py passes `total_goals_avg`.
-    # The two entry points therefore filter differently. Left exactly as-is;
-    # only the None-safety guard below is new.
+    # Apply filters through the single shared boundary (GG-006 RESOLVED).
     #
-    # Filter inputs can now be None (GG-001), and comparing None to a threshold
-    # raises TypeError. Unavailable input means the filter cannot be evaluated,
-    # so the fixture is rejected as unreliable rather than compared against an
-    # invented number. Thresholds are untouched.
-    filter_inputs = (
-        home_stats.get("home_goals_scored"),
-        away_stats.get("away_goals_scored"),
-        home_stats.get("home_clean_sheet_pct"),
-        away_stats.get("away_clean_sheet_pct"),
-    )
+    # This file's interpretation - each team's goals SCORED at the venue it is
+    # playing at - was the correct one and is now the only one. main.py used to
+    # pass `total_goals_avg` (scored + conceded) into the same parameter, so the
+    # two entry points returned different verdicts for the same fixture. Both
+    # now call `build_filter_stats`, so that is structurally impossible.
+    #
+    # `evaluate_filters` refuses to compare an absent statistic against a
+    # threshold; it reports UNEVALUATED instead of inventing a value.
+    filter_result = evaluate_filters(build_filter_stats(home_stats, away_stats))
 
-    if any(value is None for value in filter_inputs):
-        passes_filters, filter_reasons = False, ["Missing or unreliable data"]
+    passes_filters = filter_result.passed
+    filter_reasons = filter_result.reasons
+
+    # Three states, not two. "FILTER_DATA_UNAVAILABLE" is distinct from
+    # "FILTERED": one means a statistic breached a threshold, the other means no
+    # statistic was available to compare. Both block a play, but conflating them
+    # in the output is what hid GG-002 for so long.
+    if filter_result.was_evaluated:
+        filter_status = "PASSED" if passes_filters else "FILTERED"
     else:
-        passes_filters, filter_reasons = apply_filters(
-            home_avg_goals=filter_inputs[0],
-            away_avg_goals=filter_inputs[1],
-            home_clean_sheet_pct=filter_inputs[2],
-            away_clean_sheet_pct=filter_inputs[3],
-        )
-    
-    filter_status = "PASSED" if passes_filters else "FILTERED"
+        filter_status = "FILTER_DATA_UNAVAILABLE"
+
     
     # Analyze GG YES
     gg_yes_analysis = analyze_market(

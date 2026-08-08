@@ -4,18 +4,25 @@ Prioritised. Items marked ✅ RESOLVED were fixed in the Epic named on the headi
 still open and the recommendation stands. Original problem text is kept verbatim under each resolved
 item — resolutions are **appended, not substituted**, so the history stays readable.
 
-**Counts:** 4 CRITICAL (2 RESOLVED) · 7 HIGH (1 RESOLVED) · 8 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
+**Counts:** 4 CRITICAL (3 RESOLVED) · 7 HIGH (2 RESOLVED) · 8 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
 · 1 leakage risk (counted within CRITICAL, open)
 
-**Status: 26 items tracked · 7 RESOLVED · 19 open.**
+**Status: 27 items tracked · 9 RESOLVED · 18 open.**
 
 | Epic | Resolved | Items |
 |---|---|---|
 | 1B.1 — data contracts | 1 | GG-001 |
 | 1B.2 — ESPN provider | 6 | GG-003, GG-004, GG-012, GG-013, GG-014, GG-020 |
-| **Total** | **7** | 19 remain open, incl. LEAK-001 and R3-001 |
+| 1B.3 — filter wiring | 2 | GG-002, GG-006 |
+| **Total** | **9** | 18 remain open, incl. LEAK-001 and R3-001 |
 
 New in Epic 1B.2: **GG-024** (HIGH) — the ESPN team endpoint ignores `?season=`.
+
+New in Epic 1B.3: **GG-002-B** (HIGH) — two of the five GG.md hard filters
+(knockout-first-leg, heavy-favourite mismatch) have **no data source at all**. Split out of GG-002 so
+the resolved part is not held open by a distinct problem: GG-002 was a *wiring* defect (fabricated
+values reaching real filters), whereas GG-002-B is a *missing feed*.
+
 
 ---
 
@@ -64,7 +71,8 @@ New in Epic 1B.2: **GG-024** (HIGH) — the ESPN team endpoint ignores `?season=
     them would make every fixture fail the clean-sheet filter and change production output, which is
     GG-002's job, not this sub-epic's.
 
-### GG-002 — Four of five documented hard filters cannot fire
+### GG-002 — Four of five documented hard filters cannot fire — ✅ RESOLVED (Epic 1B.3)
+
 - **Component:** Filters + provider + entry points
 - **Problem:** Three filter flags are hardcoded by callers; the clean-sheet input is hardcoded `0` by
   the provider; the one remaining filter receives the wrong quantity.
@@ -80,6 +88,41 @@ New in Epic 1B.2: **GG-024** (HIGH) — the ESPN team endpoint ignores `?season=
   effectively no safety layer between the model and a bet recommendation.
 - **Future action:** Source real clean-sheet data (`api_football.py` and `sportmonks.py` already
   compute it), derive the three flags from fixture metadata, and correct the goals-average input.
+- **RESOLVED — Epic 1B.3.** No fabricated value reaches any filter. The thresholds were never wrong;
+  the inputs were. `filters.py` and `config.py` are **byte-identical** — the fix was entirely upstream.
+  - **The clean-sheet literals are gone.** `espn.py` returns `None`, not `0`. This is the crux: `0`
+    was not a harmless placeholder, it was the *assertion* "this team has never kept a clean sheet",
+    and since `0 > 0.40` is never true the filter approved **every fixture it ever saw**.
+  - **The three hardcoded flags are gone from `main.py`.** `has_reliable_data` is now computed from
+    actual availability rather than asserted `True`.
+  - **Unavailable no longer means pass.** `domain/filter_evaluation.py` returns `UNEVALUATED` and
+    **does not call `apply_filters` at all** when a required statistic is missing. There is no honest
+    value to pass: `0.0` lies about the team and `0.5` is a lie chosen because it passes.
+  - **FAILED and UNEVALUATED are now different facts.** Conflating them is what made this invisible —
+    "passed filters" was indistinguishable from "filters never ran".
+  - **Clean-sheet data is UNAVAILABLE, and that is a mathematical finding, not a parsing gap.** ESPN's
+    standings give aggregate goals-against only. `GA = 5` over 5 matches is consistent with **0** clean
+    sheets (conceded 1,1,1,1,1) and with **4** (conceded 5,0,0,0,0). No function of `(GA, matches)`
+    distinguishes them, so any clean-sheet rate derived from the aggregate is an approximation — and an
+    approximation presented as a measurement is the exact defect being closed. The correct derivation
+    is implemented and tested in `domain/match_records.py` against match-level records, ready for a
+    provider that supplies them.
+  - **Consequence, stated plainly:** with clean-sheet data unavailable, **no fixture currently reaches
+    a recommendation**. That is the correct behaviour of a safety layer that was previously disabled,
+    and is **not** grounds for loosening anything. The probability is still calculated and displayed
+    when the five POISSON_V1 inputs are present — model completeness and filter completeness are
+    separate questions.
+  - **Verification:** 1206 tests pass (2 skipped), ruff and mypy clean; golden regression 884 passed,
+    outputs identical. `git diff HEAD -- poisson.py config.py filters.py decision.py run3/` is empty.
+    New coverage: `tests/unit/test_filter_evaluation.py` (36), `tests/unit/test_match_record_derivations.py`
+    (28), `tests/integration/test_entry_point_consistency.py` (11).
+    Detail: `docs/EPIC_1B3_FILTER_WIRING.md`.
+- **Still open — split out as GG-002-B (HIGH):** the knockout-first-leg and heavy-favourite-mismatch
+  filters have **no data source at all**. They are now `False` in one visible place on the contract
+  rather than as literals buried at two call sites, but they still cannot fire. Closing them needs a
+  competition-format/market feed, not a wiring change. Spec disagreement **D3 remains partially open**
+  for this reason.
+
 
 ### GG-003 — League average goals is always the hardcoded `1.35` — ✅ RESOLVED (Epic 1B.2)
 - **Component:** ESPN provider
@@ -195,7 +238,8 @@ New in Epic 1B.2: **GG-024** (HIGH) — the ESPN team endpoint ignores `?season=
   possible, and no matchweek-scoped query exists — this is also the mechanism behind LEAK-001.
 - **Future action:** Fixture-level history in storage; derive rolling windows from it.
 
-### GG-006 — Two entry points apply different filter semantics
+### GG-006 — Two entry points apply different filter semantics — ✅ RESOLVED (Epic 1B.3)
+
 - **Component:** Entry points · **Evidence:** `main.py:100` passes `total_goals_avg` = `(GF+GA)/matches`;
   `analyze_all.py:97` passes `home_goals_scored` (home scoring rate). Both land in the parameter
   `home_avg_goals`, compared against `MIN_AVG_GOALS = 1.0`.
@@ -204,6 +248,26 @@ New in Epic 1B.2: **GG-024** (HIGH) — the ESPN team endpoint ignores `?season=
   scripts, and neither is reproducible against the spec.
 - **Future action:** One service layer, one filter contract, named unambiguously
   (`goals_scored_per_match` vs `total_goals_per_match`).
+- **RESOLVED — Epic 1B.3.** The intended meaning was recoverable, so no new interpretation was invented.
+  Three independent sources agree the statistic is goals **scored**: `GG.md` §9 ("one team averages
+  < 1.0 goal"), the `filters.py` parameter docstring ("average goals per match" *for that team*), and
+  `analyze_all.py`, which was already passing `home_goals_scored`. **`main.py` was the sole outlier.**
+  - `total_goals_avg` is `(GF + GA) / matches` — a different statistic entirely. It measures **how
+    eventful a team's matches are**, not how reliably it scores.
+  - The consequence was not academic, and is now a regression test: a side with **5 scored / 30 conceded
+    in 20 matches** has a home scoring rate of **0.30** (fails) but a `total_goals_avg` of **1.75**
+    (passes). A team that cannot score but leaks goals was being **approved** by the very filter meant
+    to exclude that profile.
+  - **One mapping point:** both entry points now call `domain.build_filter_stats`, the only place
+    either script decides what a filter input means. Fields are named for their semantics
+    (`home_avg_goals_scored`), because `home_avg_goals` was vague enough that passing a combined figure
+    did not look wrong at the call site — a self-describing name would have made the bug visible.
+  - Neither entry point imports `filters` any more, and a **structural test asserts they never do
+    again**, so the two cannot drift apart a second time.
+  - Spec disagreement **D4 is resolved** — its skipped test is now an active regression test.
+  - **Verification:** `tests/integration/test_entry_point_consistency.py` (11 tests) drives both entry
+    points from one mocked ESPN response and requires identical verdicts and identical reasons.
+
 
 ### GG-007 — Falsy-edge bug turns a zero edge into "no odds"
 - **Component:** `shared/odds.py`, `analyze_all.py` · **Evidence:** `shared/odds.py:319`
@@ -386,16 +450,17 @@ output directory; `git rm --cached` the artefacts.
 | Component | CRITICAL | HIGH | MEDIUM | LOW |
 |---|---|---|---|---|
 | ESPN provider | ✅ GG-001, ✅ GG-003 | ✅ GG-004, GG-005, GG-024 | ✅ GG-012, ✅ GG-013, ✅ GG-014 | ✅ GG-020 |
-| Filters / entry points | GG-002 | GG-006 | GG-015 | GG-021 |
+| Filters / entry points | ✅ GG-002 | ✅ GG-006 · GG-002-B (open) | GG-015 | GG-021 |
 | Run-3 | R3-001 | — | GG-010, GG-011 | — |
 | Odds | — | GG-007, GG-008 | GG-016, GG-017 | GG-019 |
 | Dead providers | — | GG-009 | — | GG-018 |
 | Storage / evaluation | LEAK-001 | — | — | — |
 | Tooling | — | — | — | GG-022, GG-023 |
 
-**Open by severity (19 total):** 2 CRITICAL (GG-002, R3-001) + LEAK-001 · 6 HIGH (GG-005, GG-006,
+**Open by severity (18 total):** 1 CRITICAL (R3-001) + LEAK-001 · 6 HIGH (GG-002-B, GG-005,
 GG-007, GG-008, GG-009, GG-024) · 5 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017) · 5 LOW (GG-018,
 GG-019, GG-021, GG-022, GG-023).
+
 
 **Carried forward from Epic 1B.2** (capability landed, not yet consumed): GG-013 and GG-014 are
 resolved in the provider but `main.py`/`analyze_all.py` do not yet filter on `is_predictable()` or
