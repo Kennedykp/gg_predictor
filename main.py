@@ -72,12 +72,16 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
     #
     # Nothing is substituted here - no zero, no league average, no other team's
     # figures. An unavailable input means no prediction for this fixture.
-    # UNATTRIBUTED, not CALCULATED: get_league_avg_goals() substitutes 1.35
-    # internally, so this layer cannot tell a measured average from the fallback
-    # (GG-003, out of scope here). Labelling it honestly rather than inferring
-    # from the value - a real league average can legitimately be 1.35.
+    # CALCULATED since Epic 1B.2 (GG-003 resolved). get_league_avg_goals() no
+    # longer substitutes 1.35 - it computes the figure from real ESPN standings
+    # or returns None - so a value arriving here is genuinely measured, and an
+    # unavailable one arrives as None and stops the prediction below.
     validation = validate_poisson_inputs(
-        league=LeagueStats.unattributed(fixture["league_id"], league_avg_goals),
+        league=(
+            LeagueStats.calculated(fixture["league_id"], league_avg_goals)
+            if league_avg_goals is not None
+            else LeagueStats.unavailable(fixture["league_id"])
+        ),
         home_team=TeamStats.from_provider_dict(home_stats),
         away_team=TeamStats.from_provider_dict(away_stats),
     )
@@ -191,11 +195,11 @@ def run_daily_workflow(target_date: date) -> List[Dict[str, Any]]:
         league_id = fixture["league_id"] # string code now
 
         # Get league average goals (cached)
+        # GG-003 (Epic 1B.2): no fallback. An unobtainable league average is
+        # cached as None and every fixture in that league is then refused by
+        # process_fixture, because POISSON_V1 divides both lambdas by it.
         if league_id not in league_avg_cache:
-            league_avg = get_league_avg_goals(league_id)
-            if league_avg is None:
-                league_avg = 1.35  # Fallback
-            league_avg_cache[league_id] = league_avg
+            league_avg_cache[league_id] = get_league_avg_goals(league_id)
 
         league_avg_goals = league_avg_cache[league_id]
 

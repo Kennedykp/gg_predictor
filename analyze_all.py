@@ -67,8 +67,15 @@ def analyze_gg_match(
     # old behaviour: a missing statistic became 0, P(GG_YES) collapsed to 0.0,
     # and `gg_no_prob = 1 - 0.0` published a 100%-confident GG_NO - which could
     # classify as STRONG_VALUE and RECOMMEND_PLAY on data that never arrived.
+    # CALCULATED since Epic 1B.2 (GG-003 resolved): get_league_avg_goals() now
+    # computes from real ESPN standings or returns None, so this layer can
+    # attribute the value instead of labelling it unattributed.
     validation = validate_poisson_inputs(
-        league=LeagueStats.unattributed(fixture["league_id"], league_avg),
+        league=(
+            LeagueStats.calculated(fixture["league_id"], league_avg)
+            if league_avg is not None
+            else LeagueStats.unavailable(fixture["league_id"])
+        ),
         home_team=TeamStats.from_provider_dict(home_stats),
         away_team=TeamStats.from_provider_dict(away_stats),
     )
@@ -232,8 +239,10 @@ def run_unified_analysis(target_date: date) -> List[Dict[str, Any]]:
         league_id = fixture["league_id"]
         
         # Cache league average
+        # GG-003 (Epic 1B.2): no `or 1.35`. Note the old expression was doubly
+        # wrong - `or` also replaced a genuine 0.0 average.
         if league_id not in league_avg_cache:
-            league_avg_cache[league_id] = get_league_avg_goals(league_id) or 1.35
+            league_avg_cache[league_id] = get_league_avg_goals(league_id)
         
         league_avg = league_avg_cache[league_id]
         
