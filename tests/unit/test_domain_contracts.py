@@ -144,7 +144,7 @@ class TestTeamStats:
     def test_is_immutable(self):
         """A record of what an API returned must not be editable after the fact."""
         with pytest.raises(dataclasses.FrozenInstanceError):
-            complete_team().home_goals_scored = 99.0  # type: ignore[misc]
+            complete_team().home_goals_scored = 99.0
 
 
 class TestLeagueStats:

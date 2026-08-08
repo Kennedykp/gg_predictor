@@ -203,7 +203,9 @@ class TestMainRefusesIncompleteData:
         the prediction rather than be replaced.
         """
         espn_stats({"359": payload(FULL_STATS), "360": payload(FULL_STATS)})
-        result = main.process_fixture(FIXTURE, league_avg_goals=None)  # type: ignore[arg-type]
+        # None is deliberately outside the declared `float` parameter type: the
+        # point of the test is that an unavailable average is refused, not coerced.
+        result = main.process_fixture(FIXTURE, league_avg_goals=None)
 
         assert result["gg_probability"] is None
         assert result["decision"] == "NO BET"
