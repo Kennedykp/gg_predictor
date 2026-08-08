@@ -23,7 +23,8 @@ from datetime import date, datetime
 from typing import List, Dict, Any
 
 from config import ALLOWED_LEAGUES
-from espn import get_fixtures, get_team_stats, get_league_avg_goals
+from espn import get_fixtures, get_team_stats, get_league_avg_goals, get_team_history
+
 from odds_api import get_btts_odds
 from poisson import calculate_gg_probability
 from decision import make_decision
@@ -31,10 +32,11 @@ from output import print_results, write_csv, write_json
 from domain import (
     LeagueStats,
     TeamStats,
-    build_filter_stats,
     evaluate_filters,
     validate_poisson_inputs,
 )
+from shared.match_history import build_fixture_filter_stats
+
 
 
 
@@ -127,7 +129,15 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
     #
     # `build_filter_stats` is now the only place either entry point decides what
     # a filter input means. Thresholds are untouched.
-    filter_result = evaluate_filters(build_filter_stats(home_stats, away_stats))
+    #
+    # Epic 1B.4 supplies the clean-sheet feed. `build_fixture_filter_stats`
+    # derives each team's rate from completed ESPN league matches kicking off
+    # strictly before this fixture - home team at home, away team away - and
+    # analyze_all.py calls the identical function, so the two cannot diverge.
+    filter_result = evaluate_filters(
+        build_fixture_filter_stats(fixture, home_stats, away_stats, get_team_history)
+    )
+
 
     result["passes_filters"] = filter_result.passed
     result["filter_outcome"] = filter_result.outcome.value

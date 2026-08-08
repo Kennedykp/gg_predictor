@@ -27,9 +27,9 @@ from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
 from domain.availability import missing_fields
+from domain.match_records import DerivedHistory
 
 __all__ = ["StatSource", "FilterStats", "REQUIRED_FILTER_FIELDS", "build_filter_stats"]
-
 
 
 class StatSource(str, Enum):
@@ -105,6 +105,29 @@ class FilterStats:
     clean_sheet_source: StatSource = StatSource.DERIVED
     avg_goals_source: StatSource = StatSource.DERIVED
 
+    # ---------------------------------------------------------------------
+    # Epic 1B.4. Match-history provenance.
+    #
+    # Sample sizes (TASK 15): how many completed, in-competition, pre-kickoff
+    # matches backed the clean-sheet rate above. A rate without its n is not
+    # interpretable - 1.0 from one match and 1.0 from twenty are different
+    # claims. None means no history derivation ran at all.
+    #
+    # NOT thresholds. Nothing in filters.py reads these; this Epic explicitly
+    # does not introduce a minimum-sample rule (TASK 15).
+    # ---------------------------------------------------------------------
+    home_history_sample: Optional[int] = None
+    away_history_sample: Optional[int] = None
+
+    # BTTS rates, derived from the SAME eligible record set as the clean-sheet
+    # rates above, so the sample sizes describe both. Carried for reporting and
+    # for the diagnostic only: no current filter compares them against anything,
+    # and TASK 29 forbids inventing one. Do not add them to
+    # REQUIRED_FILTER_FIELDS - that would make a missing BTTS rate block a
+    # recommendation the specification never asked for.
+    home_btts_pct: Optional[float] = None
+    away_btts_pct: Optional[float] = None
+
     def __post_init__(self) -> None:
         """
         Reject values that cannot be the statistic they claim to be.
@@ -114,10 +137,20 @@ class FilterStats:
         Loud failure is correct here - this is a provider/wiring bug, and the
         alternative is comparing a nonsense number against a real threshold.
         """
-        for name in ("home_clean_sheet_pct", "away_clean_sheet_pct"):
+        for name in (
+            "home_clean_sheet_pct",
+            "away_clean_sheet_pct",
+            "home_btts_pct",
+            "away_btts_pct",
+        ):
             value = getattr(self, name)
             if value is not None and not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must be a fraction in [0.0, 1.0], got {value!r}")
+
+        for name in ("home_history_sample", "away_history_sample"):
+            value = getattr(self, name)
+            if value is not None and value < 0:
+                raise ValueError(f"{name} must be >= 0, got {value!r}")
 
         for name in ("home_avg_goals_scored", "away_avg_goals_scored"):
             value = getattr(self, name)
@@ -137,9 +170,12 @@ class FilterStats:
 def build_filter_stats(
     home_stats: Dict[str, Any],
     away_stats: Dict[str, Any],
+    home_history: Optional[DerivedHistory] = None,
+    away_history: Optional[DerivedHistory] = None,
 ) -> FilterStats:
     """
-    Build filter inputs from two provider stat dicts.
+    Build filter inputs from two provider stat dicts, plus optional derived
+    match history.
 
     THE ONE PLACE either entry point decides what a filter input means (GG-006).
     main.py and analyze_all.py both call this, so "the home team's goals average"
@@ -157,20 +193,37 @@ def build_filter_stats(
     < 1.0 goal" and filters.py documents the parameter as "average goals per
     match" for that team, so the filter is about a team's own scoring.
 
-      home_clean_sheet_pct   <- home_stats["home_clean_sheet_pct"]
-      away_clean_sheet_pct   <- away_stats["away_clean_sheet_pct"]
+      home_clean_sheet_pct   <- home_history.clean_sheet_pct   (Epic 1B.4)
+                                else home_stats["home_clean_sheet_pct"]
+      away_clean_sheet_pct   <- away_history.clean_sheet_pct
+                                else away_stats["away_clean_sheet_pct"]
 
-    Each team's clean-sheet rate at its own venue. These currently arrive as
-    None: ESPN's standings aggregates cannot yield a per-match clean-sheet count
-    (see espn.get_team_stats). None flows through as UNAVAILABLE, which blocks a
-    recommendation instead of quietly passing.
+    Each team's clean-sheet rate at its own venue. Epic 1B.4 supplies these from
+    match-level ESPN schedule records, already cut off at the target kickoff by
+    `domain.derive_history`. When no history was retrieved - provider failure, or
+    a team with no completed league matches yet - the value falls back to the
+    stat dict, where ESPN's standings aggregates leave it None. None flows
+    through as UNAVAILABLE, which blocks a recommendation instead of quietly
+    passing.
+
+    The history is passed IN rather than fetched here on purpose: this module
+    stays free of provider and network dependencies, so it remains callable from
+    a pure test with no monkeypatching.
 
     `.get()` is used rather than `[...]` so a provider that omits a key entirely
     yields None (unavailable) rather than raising - absence is a data state this
     pipeline is designed to represent, not a crash.
     """
-    home_clean_sheet = home_stats.get("home_clean_sheet_pct")
-    away_clean_sheet = away_stats.get("away_clean_sheet_pct")
+    home_clean_sheet = (
+        home_history.clean_sheet_pct
+        if home_history is not None
+        else home_stats.get("home_clean_sheet_pct")
+    )
+    away_clean_sheet = (
+        away_history.clean_sheet_pct
+        if away_history is not None
+        else away_stats.get("away_clean_sheet_pct")
+    )
 
     return FilterStats(
         home_avg_goals_scored=home_stats.get("home_goals_scored"),
@@ -188,5 +241,14 @@ def build_filter_stats(
             else StatSource.DERIVED
         ),
         avg_goals_source=StatSource.DERIVED,
+        # Sample sizes and BTTS come from the same eligible record set as the
+        # clean-sheet rates. They stay None when no history was derived, rather
+        # than defaulting to 0, which would read as "we looked and found no
+        # matches" when in fact we never looked.
+        home_history_sample=home_history.sample_size if home_history is not None else None,
+        away_history_sample=away_history.sample_size if away_history is not None else None,
+        home_btts_pct=home_history.both_teams_scored_pct if home_history is not None else None,
+        away_btts_pct=away_history.both_teams_scored_pct if away_history is not None else None,
     )
+
 

@@ -35,11 +35,14 @@ from domain.filter_stats import (
 )
 from domain.fixture import Fixture
 from domain.match_records import (
+    DerivedHistory,
     MatchRecord,
     Venue,
     both_teams_scored_pct,
     clean_sheet_pct,
     completed_matches,
+    derive_history,
+    eligible_history,
 )
 from domain.stats import (
     LEGACY_FALLBACK_LEAGUE_AVERAGE,
@@ -86,4 +89,8 @@ __all__ = [
     "clean_sheet_pct",
     "both_teams_scored_pct",
     "completed_matches",
+    # point-in-time match history (Epic 1B.4)
+    "DerivedHistory",
+    "derive_history",
+    "eligible_history",
 ]

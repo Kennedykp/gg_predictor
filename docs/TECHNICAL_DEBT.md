@@ -14,7 +14,9 @@ item — resolutions are **appended, not substituted**, so the history stays rea
 | 1B.1 — data contracts | 1 | GG-001 |
 | 1B.2 — ESPN provider | 6 | GG-003, GG-004, GG-012, GG-013, GG-014, GG-020 |
 | 1B.3 — filter wiring | 2 | GG-002, GG-006 |
+| 1B.4 — match history | 0 | GG-002-B narrowed (clean-sheet feed built); nothing closed |
 | **Total** | **9** | 18 remain open, incl. LEAK-001 and R3-001 |
+
 
 New in Epic 1B.2: **GG-024** (HIGH) — the ESPN team endpoint ignores `?season=`.
 
@@ -22,6 +24,13 @@ New in Epic 1B.3: **GG-002-B** (HIGH) — two of the five GG.md hard filters
 (knockout-first-leg, heavy-favourite mismatch) have **no data source at all**. Split out of GG-002 so
 the resolved part is not held open by a distinct problem: GG-002 was a *wiring* defect (fabricated
 values reaching real filters), whereas GG-002-B is a *missing feed*.
+
+New in Epic 1B.4: **no new issues, nothing closed.** GG-002-B is **narrowed** — the clean-sheet feed
+now exists (derived from ESPN match-level schedule records), leaving knockout-first-leg and
+heavy-favourite mismatch still without a source. GG-024 gains a finding: the **schedule** endpoint
+does honour `season=`, though the **team-statistics** endpoint still does not, so GG-024 stays open.
+LEAK-001 is **explicitly not** closed — see its entry.
+
 
 
 ---
@@ -122,6 +131,14 @@ values reaching real filters), whereas GG-002-B is a *missing feed*.
   rather than as literals buried at two call sites, but they still cannot fire. Closing them needs a
   competition-format/market feed, not a wiring change. Spec disagreement **D3 remains partially open**
   for this reason.
+  - **Update (Epic 1B.4) — GG-002-B narrowed, still open.** The clean-sheet feed anticipated above now
+    exists: `espn.py` converts team-schedule events into `MatchRecord`s and
+    `domain/match_records.derive_history()` derives the rate exactly from goals-against, so the
+    derivation written in 1B.3 is no longer waiting on a provider. **Two of the three gaps remain
+    unresolved and were not faked:** knockout-first-leg still needs a competition-format feed, and
+    heavy-favourite mismatch still needs a market/favouritism signal. Both are still `False` on the
+    contract and still cannot fire, so **D3 stays partially open**.
+
 
 
 ### GG-003 — League average goals is always the hardcoded `1.35` — ✅ RESOLVED (Epic 1B.2)
@@ -208,6 +225,23 @@ values reaching real filters), whereas GG-002-B is a *missing feed*.
 - **Future action:** Store point-in-time team-stat snapshots keyed by `(team, as_of_date)`. All model
   input must flow through an as-of cutoff. This is the prerequisite for Epic "historical evaluation" and
   must land before any model comparison.
+- **Update (Epic 1B.4) — STILL OPEN. Deliberately NOT closed.** Epic 1B.4 introduced a strict
+  `record.kickoff < target_kickoff` cutoff, so the *match-history* input is now point-in-time correct
+  and the fixture cannot appear in its own history. **This does not resolve LEAK-001, and backtesting
+  remains invalid.** One input is now clean; the others are not:
+
+  | Input | Point-in-time correct? |
+  |---|---|
+  | Match history (clean-sheet / BTTS) | ✅ Yes — cutoff enforced |
+  | Team aggregate statistics (λ inputs) | ❌ No — current-season-only (GG-024) |
+  | League average goals | ❌ No — present-day standings |
+  | Odds | ❌ No — current market |
+
+  Evaluating a past fixture would still compute λ from results that had not been played at kickoff.
+  The partial fix arguably makes the danger **worse**, not better: the filters would be honest while
+  the probability they gate was computed with hindsight, so the output looks trustworthy and is not.
+  LEAK-001 closes only when **every** model and filter input flows through one as-of cutoff.
+
 
 ---
 
@@ -314,6 +348,16 @@ values reaching real filters), whereas GG-002-B is a *missing feed*.
 - **Future action:** Do not attempt historical work through this endpoint. Point-in-time team stats
   must come from stored fixture-level history (see LEAK-001 and GG-005), which is the prerequisite for
   any model comparison or backtest.
+- **Update (Epic 1B.4) — new finding, still OPEN.** The **schedule** endpoint
+  (`/{league}/teams/{id}/schedule`) *does* honour `season=`. Verified by comparing returned **event
+  IDs**, not by parameter acceptance: `season=2026` returned 0 events and `season=2025` returned 38,
+  with **zero shared IDs** — genuinely different data, not a re-labelled current season. That is a
+  third ESPN behaviour, alongside standings (honours it) and team statistics (ignores it).
+  **GG-024 stays open regardless.** It concerns the **team-statistics** endpoint, which still serves
+  current-season totals only. That endpoint supplies the goals scored/conceded aggregates POISSON_V1
+  needs, so historical λ inputs remain unavailable and no backtest is unblocked. A schedule endpoint
+  that serves history does not fix a statistics endpoint that does not.
+
 
 ---
 

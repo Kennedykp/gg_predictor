@@ -77,6 +77,10 @@ if str(REPO_ROOT) not in sys.path:
 
 import config  # noqa: E402  - must follow the sys.path bootstrap above
 import espn  # noqa: E402  - must follow the sys.path bootstrap above
+from domain.match_records import (  # noqa: E402  - as above
+    Venue,
+    derive_history,
+)
 
 DEFAULT_LEAGUE = "eng.1"
 BODY_LIMIT = 200          # hard cap on any raw body ever printed
@@ -622,9 +626,193 @@ def check_filter_stats(league: str, team_ref: dict | None) -> list[tuple[str, st
 
 
 # ---------------------------------------------------------------------------
+# 6. Team schedule - the Epic 1B.4 match-level feed
+# ---------------------------------------------------------------------------
+def check_schedule(league: str, team_ref: dict | None) -> list[tuple[str, str]]:
+    """
+    The schedule endpoint and the statistics derived from it (Epic 1B.4).
+
+    Prints the COUNTS that make a derived percentage auditable - events
+    returned, how many survived each filter, and the resulting rates with their
+    denominators. A clean-sheet figure with no visible n is not something anyone
+    can check. Payloads are never dumped (TASK 24).
+    """
+    _heading("6. TEAM SCHEDULE  /{league}/teams/{id}/schedule   [Epic 1B.4]")
+
+    if team_ref is None:
+        print("  SKIPPED: no team reference available from the earlier checks.")
+        return [("schedule", "SKIPPED - no team id")]
+
+    team_id = str(team_ref.get("id"))
+    team_name = team_ref.get("displayName") or team_ref.get("name") or f"team {team_id}"
+    season = espn.resolve_season(league)
+    url = f"{config.ESPN_BASE_URL}/{league}/teams/{team_id}/schedule"
+
+    p = probe(url, {"season": season})
+    if p.failed or not isinstance(p.payload, dict):
+        report("schedule", p, False, "no JSON object returned", "FAILED")
+        return [("schedule", "FAILED - no usable response")]
+
+    events = p.payload.get("events") or []
+    report(
+        "schedule",
+        p,
+        bool(events),
+        f"{len(events)} events for {team_name}",
+        "OK" if events else "EMPTY - no events returned",
+    )
+
+    # Status census. An unrecognised status shows up here as a number rather
+    # than disappearing silently into the excluded bucket.
+    statuses: Counter[str] = Counter()
+    for event in events:
+        competitions = event.get("competitions") or []
+        if not competitions:
+            continue
+        type_block = ((competitions[0].get("status") or {}).get("type")) or {}
+        statuses[type_block.get("name", "?")] += 1
+
+    print("  status census:")
+    for name, count in statuses.most_common():
+        print(f"    {name:<30}: {count}")
+
+    # Competition census (TASK 3). More than one slug here means the endpoint is
+    # NOT competition-pure and the adapter's filter is what protects the number.
+    competitions_seen: Counter[str] = Counter()
+    for event in events:
+        competitions_seen[((event.get("league") or {}).get("slug")) or "UNKNOWN"] += 1
+
+    print(f"  competitions present: {len(competitions_seen)}")
+    for slug, count in competitions_seen.most_common():
+        flag = "" if slug == league else "   <-- NOT the requested league"
+        print(f"    {slug:<30}: {count}{flag}")
+
+    records = espn.parse_schedule_events(p.payload, team_id, league)
+    in_league = [r for r in records if r.competition == league]
+    home_records = [r for r in in_league if r.venue == Venue.HOME]
+    away_records = [r for r in in_league if r.venue == Venue.AWAY]
+
+    print(f"  parsed MatchRecords : {len(records)}")
+    print(f"    same competition  : {len(in_league)}")
+    print(f"    home              : {len(home_records)}")
+    print(f"    away              : {len(away_records)}")
+
+    # Cutoff = now, so every figure below is point-in-time correct as of this
+    # moment - the same rule the pipeline applies per fixture.
+    cutoff = datetime.now(timezone.utc)
+    before = [r for r in in_league if r.kickoff and r.kickoff < cutoff]
+    print(f"  cutoff (now, UTC)   : {cutoff.isoformat(timespec='seconds')}")
+    print(f"    before cutoff     : {len(before)}")
+
+    home_history = derive_history(
+        records, target_kickoff=cutoff, venue=Venue.HOME, competition=league
+    )
+    away_history = derive_history(
+        records, target_kickoff=cutoff, venue=Venue.AWAY, competition=league
+    )
+
+    print()
+    print("  DERIVED  (None = UNAVAILABLE, which is not the same as 0.0)")
+    for label, history in (("HOME", home_history), ("AWAY", away_history)):
+        clean_sheet = history.clean_sheet_pct
+        btts = history.both_teams_scored_pct
+        print(
+            f"    {label} clean-sheet % : "
+            f"{'unavailable' if clean_sheet is None else format(clean_sheet, '.3f')}"
+            f"   (n={history.sample_size})"
+        )
+        print(
+            f"    {label} BTTS %        : "
+            f"{'unavailable' if btts is None else format(btts, '.3f')}"
+            f"   (n={history.sample_size})"
+        )
+
+    if home_history.sample_size == 0 and away_history.sample_size == 0:
+        print()
+        print("  NOTE: zero eligible matches. Early in a season this is the")
+        print("  EXPECTED state, not a fault. The clean-sheet filter stays")
+        print("  unavailable and blocks a recommendation rather than reading 0.")
+
+    mixed = len(competitions_seen) > 1
+    return [
+        ("schedule events", str(len(events))),
+        ("schedule records", f"{len(records)} parsed / {len(in_league)} in-league"),
+        ("competition purity", "MIXED - filter required" if mixed else f"PURE ({league})"),
+        (
+            "derived home CS%",
+            "unavailable" if home_history.clean_sheet_pct is None
+            else f"{home_history.clean_sheet_pct:.3f} (n={home_history.sample_size})",
+        ),
+        (
+            "derived away CS%",
+            "unavailable" if away_history.clean_sheet_pct is None
+            else f"{away_history.clean_sheet_pct:.3f} (n={away_history.sample_size})",
+        ),
+    ]
+
+
+def check_schedule_season(league: str, team_ref: dict | None) -> list[tuple[str, str]]:
+    """
+    Does the schedule endpoint honour `?season=` (TASK 4, GG-024)?
+
+    Epic 1B.2 established that the team STATISTICS endpoint ignores it. This
+    asks the same question of the schedule endpoint and answers it by COMPARING
+    RETURNED EVENT IDS - a 200 response proves the parameter was accepted, not
+    that it did anything.
+    """
+    _heading("7. SCHEDULE season= BEHAVIOUR   [Epic 1B.4 / GG-024]")
+
+    if team_ref is None:
+        print("  SKIPPED: no team reference available.")
+        return [("schedule season=", "SKIPPED")]
+
+    team_id = str(team_ref.get("id"))
+    current = espn.resolve_season(league)
+    previous = current - 1
+    url = f"{config.ESPN_BASE_URL}/{league}/teams/{team_id}/schedule"
+
+    current_probe = probe(url, {"season": current})
+    previous_probe = probe(url, {"season": previous})
+
+    if not isinstance(current_probe.payload, dict) or not isinstance(
+        previous_probe.payload, dict
+    ):
+        print("  One or both requests returned no JSON object.")
+        return [("schedule season=", "FAILED")]
+
+    current_ids = {e.get("id") for e in (current_probe.payload.get("events") or [])}
+    previous_ids = {e.get("id") for e in (previous_probe.payload.get("events") or [])}
+    overlap = current_ids & previous_ids
+
+    print(f"  season={current} : {len(current_ids)} events")
+    print(f"  season={previous} : {len(previous_ids)} events")
+    print(f"  shared event ids : {len(overlap)}")
+
+    if current_ids and current_ids == previous_ids:
+        verdict = "IGNORED - identical event ids for both seasons"
+    elif not previous_ids:
+        verdict = f"NO DATA returned for season={previous}"
+    elif overlap:
+        verdict = f"PARTIAL - {len(overlap)} shared event ids"
+    else:
+        verdict = "HONOURED - disjoint event sets"
+
+    print(f"  VERDICT          : {verdict}")
+    print()
+    print("  Even a HONOURED result does NOT make historical backtesting safe.")
+    print("  The team STATISTICS endpoint is still current-season-only, so")
+    print("  POISSON_V1's inputs would remain present-day values applied to a")
+    print("  past fixture. GG-024 and LEAK-001 both stay OPEN. See")
+    print("  docs/EPIC_1B4_MATCH_HISTORY.md.")
+
+    return [("schedule season=", verdict)]
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
+
 
     parser = argparse.ArgumentParser(
         prog="espn_diagnostic.py",
@@ -685,9 +873,11 @@ def main(argv: list[str] | None = None) -> int:
     summary += check_team(league, team_ref)
     summary += check_league_avg(league, season)
     summary += check_filter_stats(league, team_ref)
-
+    summary += check_schedule(league, team_ref)
+    summary += check_schedule_season(league, team_ref)
 
     _heading("SUMMARY")
+
     for label, verdict in summary:
         print(f"  {label:<24}: {_clip(verdict, WIDTH - 28)}")
     print()
