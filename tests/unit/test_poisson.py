@@ -139,13 +139,23 @@ class TestZeroValuesCurrentlyPermitted:
     """
     CHARACTERIZATION — see docs/TECHNICAL_DEBT.md GG-001.
 
-    `espn.get_stat()` returns 0 for any statistic the API omits, and this model
-    accepts 0.0 as valid data (the guard is `val < 0`, not `val <= 0`).
-    A missing statistic is therefore indistinguishable from a genuine zero.
+    This model accepts 0.0 as valid data (the guard is `val < 0`, not `val <= 0`)
+    and Epic 1B.1 deliberately left that alone: POISSON_V1 is the frozen baseline,
+    and a genuine 0.0 IS valid data that should be modelled.
 
-    These tests document that CURRENT behaviour. They are NOT a statement that
-    it is correct. Epic 1B is expected to change this, at which point these
-    tests should be updated deliberately.
+    UPDATED (Epic 1B.1) — the danger these tests originally documented was that
+    `espn.get_stat()` returned 0 for any statistic the API omitted, so fabricated
+    zeros reached this function and were modelled as real. That upstream defect
+    is fixed: absent statistics are now None and are rejected before the model
+    call. The behaviour below is therefore no longer reachable from missing data
+    in production, and is retained as a pin on POISSON_V1's own semantics.
+
+    See: tests/unit/test_espn_missing_data.py,
+         tests/integration/test_pipeline_missing_data.py
+
+    These tests document POISSON_V1's CURRENT behaviour and remain valid: the
+    model still treats 0.0 as a real value. What changed is that nothing
+    upstream fabricates one any more.
     """
 
     @pytest.mark.characterization

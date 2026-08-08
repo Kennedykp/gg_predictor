@@ -2,13 +2,13 @@
 
 Prioritised. Nothing here has been implemented — recommendations are for Epic 1 onward.
 
-**Counts:** 4 CRITICAL · 6 HIGH · 8 MEDIUM · 6 LOW · 1 leakage risk (counted within CRITICAL)
+**Counts:** 4 CRITICAL (1 RESOLVED) · 6 HIGH · 8 MEDIUM · 6 LOW · 1 leakage risk (counted within CRITICAL)
 
 ---
 
 ## CRITICAL
 
-### GG-001 — Missing statistics are silently converted to `0`
+### GG-001 — Missing statistics are silently converted to `0` — ✅ RESOLVED (Epic 1B.1)
 - **Component:** ESPN provider
 - **Problem:** `get_stat()` returns `0` for any statistic ESPN omits. `poisson.py` guards `None` and
   negatives but accepts `0.0` as valid. Missing data and genuine zero are indistinguishable everywhere.
@@ -20,6 +20,31 @@ Prioritised. Nothing here has been implemented — recommendations are for Epic 
   consequential defect: every other data problem is amplified because nothing can report "unavailable".
 - **Future action:** Introduce an explicit `DATA_UNAVAILABLE` sentinel or `Optional` propagation.
   Provider returns absence as absence; the model refuses to score rather than substituting.
+- **RESOLVED — Epic 1B.1.** Absence is now represented as `None` and refused before the model runs.
+  - `espn.get_stat()` distinguishes three cases: entry absent → `None`; entry present with no `"value"`
+    key → `None`; entry present with value `0` → `0` (genuine zero, real data).
+  - `domain/` adds typed contracts (`TeamStats`, `LeagueStats`, `DataQuality`) where every optional
+    statistic is `Optional[float]`, plus `is_available()` — an explicit `is not None` check, since
+    truthiness treats a genuine `0.0` as absent.
+  - `validate_poisson_inputs()` checks the five required model inputs and returns **no inputs at all**
+    when any is unavailable. Nothing is substituted: not `0`, not the league average, not another
+    team's figures.
+  - Both entry points refuse instead of predicting. In `analyze_all.py` this closes the worst path:
+    a missing statistic previously drove `P(GG_YES)` to `0.0`, so `1 - 0.0` published a **100%-confident
+    `GG_NO`** that could be classified `STRONG_VALUE` / `RECOMMEND_PLAY` against real odds.
+  - Filter inputs are guarded too — they can now be `None`, and `None < 1.0` raises `TypeError`.
+    An unevaluable filter rejects the fixture rather than comparing against an invented number.
+  - **`poisson.py` was not touched.** POISSON_V1 remains the frozen baseline and still accepts `0.0`
+    as valid, which is correct — a genuine `0.0` *is* valid. The fix was to stop fabricating one.
+  - Spec disagreement **D2 is resolved**: `GG.md` §6 ("if any of these are missing → NO BET") now holds.
+  - **Verification:** 946 tests pass, ruff and mypy clean; the 51-test golden regression suite is
+    unchanged, confirming identical output for complete data.
+    New coverage: `tests/unit/test_domain_contracts.py`, `tests/unit/test_espn_missing_data.py`,
+    `tests/integration/test_pipeline_missing_data.py`. Detail: `docs/EPIC_1B1_DATA_CONTRACTS.md`.
+- **Still open (deliberately out of scope):** GG-002 (clean-sheet rates still hardcoded `0`),
+  GG-003 (league average still fabricated inside the provider, so callers cannot attribute it — hence
+  the `UNATTRIBUTED` source), GG-004 (home/away counts still halved). Each changes production output
+  and needs its own sub-epic.
 
 ### GG-002 — Four of five documented hard filters cannot fire
 - **Component:** Filters + provider + entry points
