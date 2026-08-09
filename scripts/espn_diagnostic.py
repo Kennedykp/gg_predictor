@@ -61,7 +61,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 from urllib.parse import urlsplit
 
 import requests
@@ -340,8 +340,13 @@ def check_scoreboard(league: str, on: date) -> tuple[list[tuple[str, str]], dict
 
         competitions = event.get("competitions") or [{}]
         competitors = competitions[0].get("competitors") or []
-        home = next((c for c in competitors if c.get("homeAway") == "home"), {})
-        away = next((c for c in competitors if c.get("homeAway") == "away"), {})
+        home: Dict[str, Any] = next(
+            (c for c in competitors if c.get("homeAway") == "home"), {}
+        )
+        away: Dict[str, Any] = next(
+            (c for c in competitors if c.get("homeAway") == "away"), {}
+        )
+
         home_name = (home.get("team") or {}).get("displayName", "?")
         away_name = (away.get("team") or {}).get("displayName", "?")
 

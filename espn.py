@@ -34,6 +34,12 @@ from config import (
     EUROPEAN_SEASON_ROLLOVER_MONTH,
 )
 from domain.match_records import DerivedHistory, MatchRecord, Venue, derive_history
+from domain.poisson_inputs import (
+    LeagueBaseline,
+    VenueGoalAverages,
+    derive_league_baseline,
+    derive_venue_averages,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -714,6 +720,233 @@ def get_team_match_records(
     records = parse_schedule_events(result.data or {}, team_id, league_code)
     _schedule_cache[cache_key] = records
     return records
+
+
+# ESPN's scoreboard silently truncates at 100 events (verified live: a full-season
+# date range returned exactly 100 with HTTP 200 and no error field, cutting off
+# mid-November). A truncated league baseline is not a smaller sample - it is a
+# WRONG one, biased toward whichever part of the season ESPN chose to return.
+#
+# 1000 comfortably exceeds a 380-fixture league season while staying a bound
+# rather than an invitation to unbounded growth.
+_SCOREBOARD_LIMIT = 1000
+
+
+def _season_date_range(season: int) -> str:
+    """
+    ESPN `dates=` range covering one football season.
+
+    A "2025" season means 2025/26, so the window runs July 2025 to June 2026 -
+    wide enough for early qualifiers and a late final, and narrow enough that it
+    cannot reach into an adjacent season. The season boundary is what keeps
+    2025/26 results out of a 2026/27 baseline (TASK 22).
+    """
+    return f"{season}0701-{season + 1}0630"
+
+
+def parse_scoreboard_events(
+    payload: Dict[str, Any],
+    league_code: str,
+) -> List[MatchRecord]:
+    """
+    Convert an ESPN league-scoreboard payload into one MatchRecord per fixture.
+
+    Records are built from the HOME side's perspective, always. This is not an
+    arbitrary choice: it is what makes each fixture countable exactly once. The
+    league baseline sums `goals_for + goals_against`, which is the fixture's
+    total goals regardless of which side is speaking, so one consistent
+    perspective per fixture gives an exact goal total and an exact fixture count.
+
+    Rejection rules are identical to the team-schedule parser - completed status,
+    two competitors, both scores parseable, kickoff present - because a match
+    that is not trustworthy evidence for a team is not trustworthy evidence for a
+    league either.
+    """
+    records: List[MatchRecord] = []
+
+    # The feed's own declaration of which competition this response covers, used
+    # only when an event does not carry its own league slug.
+    leagues = payload.get("leagues") or []
+    payload_slug = (leagues[0].get("slug") if leagues else None) or None
+
+    for event in payload.get("events") or []:
+        competitions = event.get("competitions") or []
+        if not competitions:
+            continue
+        competition = competitions[0]
+
+        status_type = ((competition.get("status") or {}).get("type")) or {}
+        if not _is_completed_event(status_type):
+            continue
+
+        competitors = competition.get("competitors") or []
+        if len(competitors) != 2:
+            continue
+
+        home = None
+        away = None
+        for competitor in competitors:
+            if competitor.get("homeAway") == "home":
+                home = competitor
+            elif competitor.get("homeAway") == "away":
+                away = competitor
+
+        # Both sides must be explicitly labelled. Inferring the missing one from
+        # array order would invent a venue the feed never stated.
+        if home is None or away is None:
+            continue
+
+        home_goals = _parse_score(home)
+        away_goals = _parse_score(away)
+        if home_goals is None or away_goals is None:
+            continue
+
+        kickoff = parse_kickoff(event.get("date") or competition.get("date"))
+        if kickoff is None:
+            continue
+
+        event_id = event.get("id") or competition.get("id")
+        home_id = home.get("id") or (home.get("team") or {}).get("id")
+        away_id = away.get("id") or (away.get("team") or {}).get("id")
+
+        records.append(
+            MatchRecord(
+                venue=Venue.HOME,
+                goals_for=home_goals,
+                goals_against=away_goals,
+                completed=True,
+                kickoff=kickoff,
+                event_id=str(event_id) if event_id is not None else None,
+                competition=((event.get("league") or {}).get("slug")) or payload_slug,
+                team_id=str(home_id) if home_id is not None else None,
+                opponent_id=str(away_id) if away_id is not None else None,
+            )
+        )
+
+    return records
+
+
+# Per-run league cache, same contract as `_schedule_cache`: raw records only, so
+# the per-fixture cutoff still runs on every read and a cache hit can never
+# bypass it. Keyed by league and season, the two parameters that change the
+# response. One entry serves every fixture in that league for the whole run.
+_league_cache: Dict[tuple, List[MatchRecord]] = {}
+
+
+def clear_league_cache() -> None:
+    """Drop the per-run league cache. For tests, and for long-lived callers."""
+    _league_cache.clear()
+
+
+def get_league_match_records(
+    league_code: str,
+    season: Optional[int] = None,
+) -> Optional[List[MatchRecord]]:
+    """
+    Every completed fixture in one league season, from ESPN's scoreboard.
+
+    ONE request per league per run, not one per team. Assembling this from the
+    20 team schedules would take 20 requests and then need deduplication, since
+    each fixture appears in two of them; the scoreboard returns each fixture once
+    and was verified live to reproduce the league goal total exactly (eng.1
+    2025-26: 380 fixtures, 1045 goals, matching the standings-derived figure).
+
+    Returns None on provider failure - never an empty list, which would be
+    indistinguishable from a league that has genuinely not started (TASK 15).
+    """
+    if season is None:
+        season = resolve_season(league_code)
+
+    cache_key = (league_code, season)
+    if cache_key in _league_cache:
+        return _league_cache[cache_key]
+
+    url = f"{ESPN_BASE_URL}/{league_code}/scoreboard"
+    result = _fetch(
+        url,
+        params={"dates": _season_date_range(season), "limit": _SCOREBOARD_LIMIT},
+    )
+
+    if not result.ok:
+        return None
+
+    payload = result.data or {}
+    records = parse_scoreboard_events(payload, league_code)
+
+    # Truncation guard. If ESPN returned exactly the cap, the response was
+    # probably cut short and the baseline would be computed from an arbitrary
+    # slice of the season. Refusing is correct: a silently partial league average
+    # divides every lambda in the run by a wrong number, and unlike a failed
+    # request it would leave no trace.
+    if len(payload.get("events") or []) >= _SCOREBOARD_LIMIT:
+        print(
+            f"ESPN scoreboard for {league_code} season={season} hit the "
+            f"{_SCOREBOARD_LIMIT}-event limit; refusing a possibly truncated "
+            "league baseline"
+        )
+        return None
+
+    _league_cache[cache_key] = records
+    return records
+
+
+def get_league_baseline(
+    league_code: str,
+    target_kickoff: datetime,
+    exclude_event_id: Optional[str] = None,
+    season: Optional[int] = None,
+) -> Optional[LeagueBaseline]:
+    """
+    Point-in-time league goals per team per match, as of one kickoff.
+
+    Composes fetch -> parse -> `domain.derive_league_baseline`, which takes the
+    cutoff as a REQUIRED keyword argument. There is no path through this module
+    that yields a league average over a whole finished season when a mid-season
+    fixture is being predicted.
+
+    Returns None when the provider failed, so the caller can distinguish that
+    from a league with no completed fixtures yet.
+    """
+    records = get_league_match_records(league_code, season=season)
+    if records is None:
+        return None
+
+    return derive_league_baseline(
+        records,
+        target_kickoff=target_kickoff,
+        competition=league_code,
+        exclude_event_id=exclude_event_id,
+    )
+
+
+def get_team_venue_averages(
+    team_id: str,
+    league_code: str,
+    venue: str,
+    target_kickoff: datetime,
+    exclude_event_id: Optional[str] = None,
+    season: Optional[int] = None,
+) -> Optional[VenueGoalAverages]:
+    """
+    Point-in-time goals for/against per match for one team at one venue.
+
+    Reuses the same cached team-schedule records as `get_team_history`, so
+    turning on point-in-time model inputs costs no additional requests - the
+    filter statistics and the model inputs are two derivations over one fetch.
+
+    Returns None on provider failure, never zeroed averages.
+    """
+    records = get_team_match_records(team_id, league_code, season=season)
+    if records is None:
+        return None
+
+    return derive_venue_averages(
+        records,
+        target_kickoff=target_kickoff,
+        venue=venue,
+        competition=league_code,
+        exclude_event_id=exclude_event_id,
+    )
 
 
 def get_team_history(
