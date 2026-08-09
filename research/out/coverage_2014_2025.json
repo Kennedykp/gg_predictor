@@ -1,0 +1,2376 @@
+[
+  {
+    "league": "eng.1",
+    "season": 2014,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2014": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 975,
+    "first_kickoff": "2014-08-16T11:45Z",
+    "last_kickoff": "2015-05-24T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2015,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2015": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1026,
+    "first_kickoff": "2015-08-08T11:45Z",
+    "last_kickoff": "2016-05-17T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2016,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2016": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1064,
+    "first_kickoff": "2016-08-13T11:30Z",
+    "last_kickoff": "2017-05-21T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2017,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2017": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1018,
+    "first_kickoff": "2017-08-11T18:45Z",
+    "last_kickoff": "2018-05-13T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2018,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2018": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1072,
+    "first_kickoff": "2018-08-10T19:00Z",
+    "last_kickoff": "2019-05-12T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2019,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 314,
+    "declared_season_years": {
+      "2019": 314
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 314
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 314,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 314,
+    "total_goals": 840,
+    "first_kickoff": "2019-08-09T19:00Z",
+    "last_kickoff": "2020-06-30T19:15Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 314
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2020,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 446,
+    "declared_season_years": {
+      "2019": 66,
+      "2020": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 446
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 446,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 23,
+    "distinct_teams_named": 23,
+    "valid_match_records": 446,
+    "total_goals": 1218,
+    "first_kickoff": "2020-07-01T17:00Z",
+    "last_kickoff": "2021-05-23T15:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 446
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2021,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2021": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1071,
+    "first_kickoff": "2021-08-13T19:00Z",
+    "last_kickoff": "2022-05-22T15:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2022,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2022": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1084,
+    "first_kickoff": "2022-08-05T19:00Z",
+    "last_kickoff": "2023-05-28T15:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2023,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2023": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1246,
+    "first_kickoff": "2023-08-11T19:00Z",
+    "last_kickoff": "2024-05-19T15:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2024,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2024": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1115,
+    "first_kickoff": "2024-08-16T19:00Z",
+    "last_kickoff": "2025-05-25T15:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "eng.1",
+    "season": 2025,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2025": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1045,
+    "first_kickoff": "2025-08-15T19:00Z",
+    "last_kickoff": "2026-05-24T15:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2014,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2014": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 843,
+    "first_kickoff": "2014-08-22T18:30Z",
+    "last_kickoff": "2015-05-23T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2015,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2015": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 866,
+    "first_kickoff": "2015-08-14T18:30Z",
+    "last_kickoff": "2016-05-14T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2016,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2016": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 877,
+    "first_kickoff": "2016-08-26T18:30Z",
+    "last_kickoff": "2017-05-20T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2017,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2017": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 855,
+    "first_kickoff": "2017-08-18T18:30Z",
+    "last_kickoff": "2018-05-12T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2018,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2018": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 973,
+    "first_kickoff": "2018-08-24T18:30Z",
+    "last_kickoff": "2019-05-18T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2019,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2019": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 982,
+    "first_kickoff": "2019-08-16T18:30Z",
+    "last_kickoff": "2020-06-27T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2020,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2020": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 928,
+    "first_kickoff": "2020-09-18T18:30Z",
+    "last_kickoff": "2021-05-22T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2021,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2021": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 954,
+    "first_kickoff": "2021-08-13T18:30Z",
+    "last_kickoff": "2022-05-14T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2022,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2022": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 971,
+    "first_kickoff": "2022-08-05T18:30Z",
+    "last_kickoff": "2023-05-27T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2023,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2023": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 985,
+    "first_kickoff": "2023-08-18T18:30Z",
+    "last_kickoff": "2024-05-18T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2024,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2024": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 959,
+    "first_kickoff": "2024-08-23T18:30Z",
+    "last_kickoff": "2025-05-17T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.1",
+    "season": 2025,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2025": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 990,
+    "first_kickoff": "2025-08-22T18:30Z",
+    "last_kickoff": "2026-05-16T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2014,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2014": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1024,
+    "first_kickoff": "2014-08-30T16:00Z",
+    "last_kickoff": "2015-05-31T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2015,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2015": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 979,
+    "first_kickoff": "2015-08-22T16:00Z",
+    "last_kickoff": "2016-05-15T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2016,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2016": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1123,
+    "first_kickoff": "2016-08-20T16:00Z",
+    "last_kickoff": "2017-05-28T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2017,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2017": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1017,
+    "first_kickoff": "2017-08-19T16:00Z",
+    "last_kickoff": "2018-05-20T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2018,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2018": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1019,
+    "first_kickoff": "2018-08-18T16:00Z",
+    "last_kickoff": "2019-05-26T18:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2019,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 282,
+    "declared_season_years": {
+      "2019": 282
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 282
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 282,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 282,
+    "total_goals": 838,
+    "first_kickoff": "2019-08-24T16:00Z",
+    "last_kickoff": "2020-06-30T19:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 282
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2020,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 478,
+    "declared_season_years": {
+      "2019": 98,
+      "2020": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 478
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 478,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 23,
+    "distinct_teams_named": 23,
+    "valid_match_records": 478,
+    "total_goals": 1476,
+    "first_kickoff": "2020-07-01T17:30Z",
+    "last_kickoff": "2021-05-23T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 478
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2021,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2021": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1089,
+    "first_kickoff": "2021-08-21T16:30Z",
+    "last_kickoff": "2022-05-22T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2022,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 381,
+    "declared_season_years": {
+      "2022": 381
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 381
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 381,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 381,
+    "total_goals": 978,
+    "first_kickoff": "2022-08-13T16:30Z",
+    "last_kickoff": "2023-06-11T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 381
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2023,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2023": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 992,
+    "first_kickoff": "2023-08-19T16:30Z",
+    "last_kickoff": "2024-06-02T16:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2024,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2024": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 973,
+    "first_kickoff": "2024-08-17T16:30Z",
+    "last_kickoff": "2025-05-25T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "ita.1",
+    "season": 2025,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2025": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 922,
+    "first_kickoff": "2025-08-23T16:30Z",
+    "last_kickoff": "2026-05-24T19:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2014,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2014": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1008,
+    "first_kickoff": "2014-08-23T17:00Z",
+    "last_kickoff": "2015-05-23T18:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2015,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2015": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1043,
+    "first_kickoff": "2015-08-21T18:30Z",
+    "last_kickoff": "2016-05-15T17:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2016,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2016": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1118,
+    "first_kickoff": "2016-08-19T18:45Z",
+    "last_kickoff": "2017-05-21T18:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2017,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2017": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1024,
+    "first_kickoff": "2017-08-18T18:15Z",
+    "last_kickoff": "2018-05-20T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2018,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2018": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 983,
+    "first_kickoff": "2018-08-17T18:15Z",
+    "last_kickoff": "2019-05-19T14:15Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2019,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 323,
+    "declared_season_years": {
+      "2019": 323
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 323
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 323,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 323,
+    "total_goals": 813,
+    "first_kickoff": "2019-08-16T19:00Z",
+    "last_kickoff": "2020-06-30T20:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 323
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2020,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 437,
+    "declared_season_years": {
+      "2019": 57,
+      "2020": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 437
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 437,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 23,
+    "distinct_teams_named": 23,
+    "valid_match_records": 437,
+    "total_goals": 1082,
+    "first_kickoff": "2020-07-01T17:30Z",
+    "last_kickoff": "2021-05-23T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 437
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2021,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2021": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 951,
+    "first_kickoff": "2021-08-13T19:00Z",
+    "last_kickoff": "2022-05-22T20:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2022,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2022": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 375,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 375,
+    "total_goals": 936,
+    "first_kickoff": "2022-08-12T19:00Z",
+    "last_kickoff": "2023-06-04T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 375,
+      "STATUS_SCHEDULED": 5
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2023,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2023": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1005,
+    "first_kickoff": "2023-08-11T17:30Z",
+    "last_kickoff": "2024-05-26T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2024,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2024": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 995,
+    "first_kickoff": "2024-08-15T17:00Z",
+    "last_kickoff": "2025-05-25T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "esp.1",
+    "season": 2025,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2025": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1024,
+    "first_kickoff": "2025-08-15T17:00Z",
+    "last_kickoff": "2026-05-24T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2014,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2014": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 947,
+    "first_kickoff": "2014-08-08T18:30Z",
+    "last_kickoff": "2015-05-23T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2015,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2015": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 960,
+    "first_kickoff": "2015-08-07T18:30Z",
+    "last_kickoff": "2016-05-14T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2016,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 382,
+    "declared_season_years": {
+      "2016": 382
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 382
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 381,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 21,
+    "distinct_teams_named": 21,
+    "valid_match_records": 381,
+    "total_goals": 994,
+    "first_kickoff": "2016-08-12T18:00Z",
+    "last_kickoff": "2017-05-28T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 381,
+      "STATUS_ABANDONED": 1
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2017,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 384,
+    "declared_season_years": {
+      "2017": 384
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 384
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 384,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 23,
+    "distinct_teams_named": 23,
+    "valid_match_records": 384,
+    "total_goals": 1043,
+    "first_kickoff": "2017-08-04T18:45Z",
+    "last_kickoff": "2018-05-27T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 383,
+      "STATUS_FINAL_PEN": 1
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2018,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 384,
+    "declared_season_years": {
+      "2018": 384
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 384
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 384,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 23,
+    "distinct_teams_named": 23,
+    "valid_match_records": 384,
+    "total_goals": 983,
+    "first_kickoff": "2018-08-10T18:45Z",
+    "last_kickoff": "2019-06-02T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 382,
+      "STATUS_FINAL_PEN": 1,
+      "STATUS_FINAL_AET": 1
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2019,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2019": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 279,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 279,
+    "total_goals": 704,
+    "first_kickoff": "2019-08-09T18:45Z",
+    "last_kickoff": "2020-05-23T18:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 279,
+      "STATUS_CANCELED": 101
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2020,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2020": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1049,
+    "first_kickoff": "2020-08-21T17:00Z",
+    "last_kickoff": "2021-05-23T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2021,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2021": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1067,
+    "first_kickoff": "2021-08-06T19:00Z",
+    "last_kickoff": "2022-05-21T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2022,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 380,
+    "declared_season_years": {
+      "2022": 380
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 380
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 380,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 20,
+    "distinct_teams_named": 20,
+    "valid_match_records": 380,
+    "total_goals": 1067,
+    "first_kickoff": "2022-08-05T19:00Z",
+    "last_kickoff": "2023-06-03T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 380
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2023,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2023": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 826,
+    "first_kickoff": "2023-08-11T19:00Z",
+    "last_kickoff": "2024-05-19T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2024,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2024": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 911,
+    "first_kickoff": "2024-08-16T18:45Z",
+    "last_kickoff": "2025-05-17T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "fra.1",
+    "season": 2025,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2025": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 305,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 305,
+    "total_goals": 863,
+    "first_kickoff": "2025-08-15T18:45Z",
+    "last_kickoff": "2026-05-17T19:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 305,
+      "STATUS_ABANDONED": 1
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2014,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 558,
+    "declared_season_years": {
+      "2014": 558
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 558
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 556,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 556,
+    "total_goals": 1485,
+    "first_kickoff": "2014-08-08T18:45Z",
+    "last_kickoff": "2015-05-25T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 556,
+      "STATUS_POSTPONED": 1,
+      "STATUS_ABANDONED": 1
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2015,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2015": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 555,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 555,
+    "total_goals": 1344,
+    "first_kickoff": "2015-08-07T18:45Z",
+    "last_kickoff": "2016-05-28T16:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 555,
+      "STATUS_SCHEDULED": 2
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2016,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2016": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 557,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 557,
+    "total_goals": 1446,
+    "first_kickoff": "2016-08-05T18:45Z",
+    "last_kickoff": "2017-05-29T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 555,
+      "STATUS_FINAL_PEN": 2
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2017,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2017": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 557,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 557,
+    "total_goals": 1414,
+    "first_kickoff": "2017-08-04T18:45Z",
+    "last_kickoff": "2018-05-26T16:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 557
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2018,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2018": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 557,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 557,
+    "total_goals": 1486,
+    "first_kickoff": "2018-08-03T19:00Z",
+    "last_kickoff": "2019-05-27T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 556,
+      "STATUS_FINAL_PEN": 1
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2019,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 475,
+    "declared_season_years": {
+      "2019": 475
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 475
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 475,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 475,
+    "total_goals": 1244,
+    "first_kickoff": "2019-08-02T18:45Z",
+    "last_kickoff": "2020-06-30T18:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 475
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2020,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 639,
+    "declared_season_years": {
+      "2019": 82,
+      "2020": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 639
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 639,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 30,
+    "distinct_teams_named": 30,
+    "valid_match_records": 639,
+    "total_goals": 1510,
+    "first_kickoff": "2020-07-01T16:00Z",
+    "last_kickoff": "2021-05-29T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 638,
+      "STATUS_FINAL_AET": 1
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2021,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2021": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 557,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 557,
+    "total_goals": 1395,
+    "first_kickoff": "2021-08-06T18:45Z",
+    "last_kickoff": "2022-05-29T15:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 556,
+      "STATUS_FINAL_PEN": 1
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2022,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2022": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 545,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 545,
+    "total_goals": 1316,
+    "first_kickoff": "2022-07-29T19:00Z",
+    "last_kickoff": "2023-05-27T15:45Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 544,
+      "STATUS_SCHEDULED": 12,
+      "STATUS_FINAL_PEN": 1
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2023,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2023": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 557,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 557,
+    "total_goals": 1489,
+    "first_kickoff": "2023-08-04T19:00Z",
+    "last_kickoff": "2024-05-26T14:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 557
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2024,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2024": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 557,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 557,
+    "total_goals": 1367,
+    "first_kickoff": "2024-08-09T19:00Z",
+    "last_kickoff": "2025-05-24T14:01Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 556,
+      "STATUS_FINAL_AET": 1
+    }
+  },
+  {
+    "league": "eng.2",
+    "season": 2025,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 557,
+    "declared_season_years": {
+      "2025": 557
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 557
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 557,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 24,
+    "distinct_teams_named": 24,
+    "valid_match_records": 557,
+    "total_goals": 1444,
+    "first_kickoff": "2025-08-08T19:00Z",
+    "last_kickoff": "2026-05-23T14:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 556,
+      "STATUS_FINAL_AET": 1
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2014,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 307,
+    "declared_season_years": {
+      "2014": 307
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 307
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 307,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 19,
+    "distinct_teams_named": 19,
+    "valid_match_records": 307,
+    "total_goals": 763,
+    "first_kickoff": "2014-08-01T18:30Z",
+    "last_kickoff": "2015-05-29T18:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 307
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2015,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 308,
+    "declared_season_years": {
+      "2015": 308
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 308
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 308,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 19,
+    "distinct_teams_named": 19,
+    "valid_match_records": 308,
+    "total_goals": 813,
+    "first_kickoff": "2015-07-24T18:30Z",
+    "last_kickoff": "2016-05-24T17:10Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 308
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2016,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 308,
+    "declared_season_years": {
+      "2016": 308
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 308
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 308,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 19,
+    "distinct_teams_named": 19,
+    "valid_match_records": 308,
+    "total_goals": 765,
+    "first_kickoff": "2016-08-05T18:30Z",
+    "last_kickoff": "2017-05-30T16:00Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 308
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2017,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 308,
+    "declared_season_years": {
+      "2017": 308
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 308
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 308,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 19,
+    "distinct_teams_named": 19,
+    "valid_match_records": 308,
+    "total_goals": 847,
+    "first_kickoff": "2017-07-28T18:30Z",
+    "last_kickoff": "2018-05-22T16:15Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 308
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2018,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 308,
+    "declared_season_years": {
+      "2018": 308
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 308
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 308,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 19,
+    "distinct_teams_named": 19,
+    "valid_match_records": 308,
+    "total_goals": 912,
+    "first_kickoff": "2018-08-03T18:30Z",
+    "last_kickoff": "2019-05-28T16:15Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 308
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2019,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2019": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 881,
+    "first_kickoff": "2019-07-26T18:30Z",
+    "last_kickoff": "2020-06-28T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2020,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2020": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 908,
+    "first_kickoff": "2020-09-18T16:30Z",
+    "last_kickoff": "2021-05-23T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2021,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2021": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 892,
+    "first_kickoff": "2021-07-23T18:30Z",
+    "last_kickoff": "2022-05-15T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2022,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2022": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 901,
+    "first_kickoff": "2022-07-15T18:30Z",
+    "last_kickoff": "2023-05-28T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2023,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 126,
+    "declared_season_years": {
+      "2023": 126
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 126
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 126,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 126,
+    "total_goals": 403,
+    "first_kickoff": "2023-07-28T18:30Z",
+    "last_kickoff": "2024-05-19T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 126
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2024,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2024": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 925,
+    "first_kickoff": "2024-08-02T18:30Z",
+    "last_kickoff": "2025-05-18T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  },
+  {
+    "league": "ger.2",
+    "season": 2025,
+    "http_ok": true,
+    "error": null,
+    "raw_events": 306,
+    "declared_season_years": {
+      "2025": 306
+    },
+    "payload_season_year": 2026,
+    "event_league_slugs": {
+      "null": 306
+    },
+    "duplicate_event_ids": 0,
+    "completed_events": 306,
+    "missing_scores": 0,
+    "missing_kickoff": 0,
+    "distinct_team_ids": 18,
+    "distinct_teams_named": 18,
+    "valid_match_records": 306,
+    "total_goals": 897,
+    "first_kickoff": "2025-08-01T18:30Z",
+    "last_kickoff": "2026-05-17T13:30Z",
+    "truncated": false,
+    "status_names": {
+      "STATUS_FULL_TIME": 306
+    }
+  }
+]
