@@ -16,3 +16,7 @@ output_*.csv
 output_*.json
 analysis_output_*.json
 run3/run3_output_*.json
+
+# Epic 2A research tooling: cached ESPN payloads (read-only audit artifacts)
+research/.cache/
+research/data/
