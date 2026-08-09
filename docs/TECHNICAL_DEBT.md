@@ -15,7 +15,9 @@ item — resolutions are **appended, not substituted**, so the history stays rea
 | 1B.2 — ESPN provider | 6 | GG-003, GG-004, GG-012, GG-013, GG-014, GG-020 |
 | 1B.3 — filter wiring | 2 | GG-002, GG-006 |
 | 1B.4 — match history | 0 | GG-002-B narrowed (clean-sheet feed built); nothing closed |
+| 1B.5 — point-in-time model inputs | 0 | LEAK-001 narrowed to odds only; GG-024 superseded in practice; nothing closed |
 | **Total** | **9** | 18 remain open, incl. LEAK-001 and R3-001 |
+
 
 
 New in Epic 1B.2: **GG-024** (HIGH) — the ESPN team endpoint ignores `?season=`.
@@ -241,6 +243,44 @@ LEAK-001 is **explicitly not** closed — see its entry.
   The partial fix arguably makes the danger **worse**, not better: the filters would be honest while
   the probability they gate was computed with hindsight, so the output looks trustworthy and is not.
   LEAK-001 closes only when **every** model and filter input flows through one as-of cutoff.
+
+- **Update (Epic 1B.5) — NARROWED TO ODDS. Still OPEN. Backtesting is still NOT safe.** All five
+  POISSON_V1 inputs are now derived from completed matches with `kickoff < target`, so the λ inputs
+  and the league baseline no longer come from present-day aggregates. `get_team_stats()` is not
+  consulted on the model path at all; the table above becomes:
+
+  | Input | Point-in-time correct? |
+  |---|---|
+  | Match history (clean-sheet / BTTS) | ✅ Yes — cutoff enforced (1B.4) |
+  | Team λ inputs (goals scored/conceded by venue) | ✅ Yes — derived from pre-kickoff matches (1B.5) |
+  | League average goals | ✅ Yes — derived from pre-kickoff matches (1B.5) |
+  | Odds | ❌ **No — current market only** |
+
+  **Why this is still not closed.** Three reasons, each sufficient on its own:
+
+  1. **Odds are still today's.** `decision.py` compares the model probability against the price
+     available *now*. Every recommendation, edge and value classification for a past fixture would be
+     computed against a market that did not exist at kickoff. Since the edge decides whether a bet is
+     placed, a backtest of *recommendations* remains invalid even with a perfectly clean probability.
+  2. **The statistic endpoint has not changed** (GG-024). The point-in-time λ inputs come from the
+     *schedule* endpoint; `get_team_stats()` is still current-season-only and is still used for
+     display and diagnostics. It must never be reintroduced as a model fallback — a regression test
+     now makes calling it from the model path an outright error.
+  3. **Correct mechanics are not a validated backtest.** No historical run has been executed,
+     scored, or compared against a holdout. "The inputs respect a cutoff" and "the measured accuracy
+     is trustworthy" are different claims, and only the first is supported.
+
+  **What is genuinely established** is narrower and worth stating precisely: given a target kickoff,
+  the five model inputs are invariant to everything that happens at or after it. That is verified
+  behaviourally rather than by inspection — `tests/regression/test_point_in_time_inputs.py` adds 30
+  future matches and a whole future league programme and requires the inputs to be **byte-identical**,
+  and the suite was mutation-tested (weakening `<` to `<=` and removing the cutoff each produce
+  failures) to confirm the guard actually bites rather than passing vacuously.
+
+  **Live confirmation (2026-08-09, read-only).** For a 2026-02-08 target: Arsenal HOME
+  n=13, 2.385 GF / 0.615 GA; Chelsea AWAY n=13, 1.923 GF / 1.154 GA — 13 matches, not the
+  19 a full-season aggregate would supply, which is the cutoff visibly doing its job on real data.
+
 
 
 ---

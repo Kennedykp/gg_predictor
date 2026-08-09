@@ -19,32 +19,55 @@ from typing import List, Dict, Any, Optional
 # Add parent directory for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from espn import get_fixtures, get_team_stats, get_league_avg_goals, get_team_history
+from espn import (
+    get_fixtures,
+    get_league_avg_goals,
+    get_league_baseline,
+    get_team_history,
+    get_team_stats,
+    get_team_venue_averages,
+)
 from poisson import calculate_gg_probability
 from shared.odds import analyze_market, clear_cache
-from shared.match_history import build_fixture_filter_stats
-from config import ALLOWED_LEAGUES
-from domain import (
-    LeagueStats,
-    TeamStats,
-    evaluate_filters,
-    validate_poisson_inputs,
+from shared.match_history import (
+    build_fixture_filter_stats,
+    build_fixture_poisson_inputs,
 )
+from config import ALLOWED_LEAGUES
+# `validate_poisson_inputs` / `LeagueStats` / `TeamStats` validated the
+# CURRENT-SEASON aggregate dicts that used to feed the model. The point-in-time
+# contract returned by `build_fixture_poisson_inputs` carries its own
+# completeness check, so the guarantee is enforced on the data actually modelled.
+from domain import evaluate_filters
+
 
 
 
 
 def analyze_gg_match(
     fixture: Dict[str, Any],
-    home_stats: Dict[str, Any],
-    away_stats: Dict[str, Any],
-    league_avg: float,
+    home_stats: Optional[Dict[str, Any]],
+    away_stats: Optional[Dict[str, Any]],
+    league_avg: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Analyze a single fixture for GG markets (YES and NO).
-    
+
     Returns list of market analysis dicts.
+
+    `home_stats`/`away_stats` are Optional because the provider returns None on
+    failure and the branch below relies on that: annotating them as required
+    dicts claimed a guarantee the ESPN layer does not make, so the type said
+    "cannot be None" while the first statement of the body checked for exactly
+    that.
+
+    `league_avg` is **vestigial and no longer used for modelling.** Since Epic
+    1B.5 the baseline comes from `model_inputs.league_avg_goals`, derived from
+    matches before this fixture's kickoff; the caller's value is a current-season
+    figure. It is kept only so existing callers keep working, and is Optional
+    because `get_league_avg_goals()` returns None when unavailable (GG-003).
     """
+
     results = []
     
     # Calculate GG probability
@@ -69,25 +92,34 @@ def analyze_gg_match(
             })
         return results
     
-    # Validate the five required POISSON_V1 inputs BEFORE the model call.
-    # GG-001 (Epic 1B.1). This path was the most dangerous consequence of the
-    # old behaviour: a missing statistic became 0, P(GG_YES) collapsed to 0.0,
-    # and `gg_no_prob = 1 - 0.0` published a 100%-confident GG_NO - which could
-    # classify as STRONG_VALUE and RECOMMEND_PLAY on data that never arrived.
-    # CALCULATED since Epic 1B.2 (GG-003 resolved): get_league_avg_goals() now
-    # computes from real ESPN standings or returns None, so this layer can
-    # attribute the value instead of labelling it unattributed.
-    validation = validate_poisson_inputs(
-        league=(
-            LeagueStats.calculated(fixture["league_id"], league_avg)
-            if league_avg is not None
-            else LeagueStats.unavailable(fixture["league_id"])
-        ),
-        home_team=TeamStats.from_provider_dict(home_stats),
-        away_team=TeamStats.from_provider_dict(away_stats),
+    # POINT-IN-TIME MODEL INPUTS (Epic 1B.5, LEAK-001).
+    #
+    # Identical call to main.py's, through the same shared boundary, so the two
+    # entry points cannot derive different inputs for the same fixture - the
+    # structural fix GG-006 established for filters, now applied to the model.
+    #
+    # All five inputs come from matches that kicked off STRICTLY BEFORE this
+    # fixture. The previous source, ESPN's current-season aggregates, described
+    # the season as it stands today, so scoring an already-played fixture used
+    # its own result as evidence for itself.
+    #
+    # GG-001's guarantee is preserved and strengthened: incomplete inputs are
+    # refused rather than modelled. That matters most here, because this file
+    # publishes `gg_no_prob = 1 - gg_yes_prob`, so a fabricated 0.0 becomes a
+    # 100%-confident GG_NO recommendation.
+    model_inputs = build_fixture_poisson_inputs(
+        fixture,
+        get_team_venue_averages,
+        get_league_baseline,
     )
 
-    if not validation.is_complete:
+    if not model_inputs.is_complete:
+        # No fallback to current-season aggregates. That fallback would fire
+        # exactly when history is thin - early season, promoted sides - which is
+        # where the leak was most valuable and least visible.
+        reason = "Point-in-time model inputs unavailable: " + ", ".join(
+            model_inputs.missing
+        )
         for market in ["GG_YES", "GG_NO"]:
             results.append({
                 "fixture_id": fixture["fixture_id"],
@@ -103,12 +135,14 @@ def analyze_gg_match(
                 "classification": "NO_ODDS",
                 "system_recommendation": "RECOMMEND_NO_PLAY",
                 "filter_status": "MISSING_DATA",
-                "filter_reasons": [validation.reason()],
+                "filter_reasons": [reason],
+                "model_input_samples": {
+                    "home": model_inputs.home_sample,
+                    "away": model_inputs.away_sample,
+                    "league": model_inputs.league_sample,
+                },
             })
         return results
-
-    model_inputs = validation.inputs
-    assert model_inputs is not None  # guaranteed by is_complete
 
     prob_result = calculate_gg_probability(
         league_avg_goals=model_inputs.league_avg_goals,

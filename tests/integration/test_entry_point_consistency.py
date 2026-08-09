@@ -15,6 +15,7 @@ the outputs aligned is free to change the wiring.
 from typing import Any, Dict, Optional
 
 import pytest
+from conftest import espn_event, utc
 
 import analyze_all
 import espn
@@ -24,7 +25,6 @@ from config import MIN_AVG_GOALS
 from domain import build_filter_stats, evaluate_filters
 
 FIXTURE: Dict[str, Any] = {
-
     "fixture_id": "900",
     "league_id": "eng.1",
     "league_name": "English Premier League",
@@ -34,7 +34,16 @@ FIXTURE: Dict[str, Any] = {
     "away_team_name": "Chelsea",
     "datetime": "2026-02-08T15:00Z",
     "status": "STATUS_SCHEDULED",
+    # Epic 1B.5: model inputs are derived from matches strictly before kickoff,
+    # so the target kickoff is now a required part of the fixture contract.
+    "kickoff_utc": utc(2026, 2, 8, 15, 0),
 }
+
+# Point-in-time history feeding the five POISSON_V1 inputs. Both entry points
+# read the SAME feed here - that shared source is the whole point of GG-006, so
+# any divergence in the verdict is attributable to wiring rather than to data.
+HOME_HISTORY = [espn_event(f"eh{i}", utc(2025, 9, i + 1), "359", "900", 2, 1) for i in range(5)]
+AWAY_HISTORY = [espn_event(f"ea{i}", utc(2025, 9, i + 1), "901", "360", 1, 2) for i in range(5)]
 
 
 def stats_payload(
@@ -80,12 +89,22 @@ def stats_payload(
 # A hopeless attack that leaks goals. The old main.py saw 1.75 and approved it;
 # analyze_all.py saw 0.30 and rejected it. Both must now reject.
 LEAKY_HOME = stats_payload(
-    games=20, home_games=10, away_games=10,
-    home_for=3, home_against=18, away_for=2, away_against=12,
+    games=20,
+    home_games=10,
+    away_games=10,
+    home_for=3,
+    home_against=18,
+    away_for=2,
+    away_against=12,
 )
 SOLID_AWAY = stats_payload(
-    games=20, home_games=10, away_games=10,
-    home_for=18, home_against=8, away_for=14, away_against=10,
+    games=20,
+    home_games=10,
+    away_games=10,
+    home_for=18,
+    home_against=8,
+    away_for=14,
+    away_against=10,
 )
 
 
@@ -103,9 +122,26 @@ def espn_stats(monkeypatch):
     return _install
 
 
+@pytest.fixture(autouse=True)
+def _point_in_time_history(espn_feed):
+    """
+    A complete match history for both sides, shared by both entry points.
+
+    Autouse because since Epic 1B.5 the model reads this rather than the
+    aggregate payload. Without it every fixture would be refused for missing
+    model inputs, and the filter-agreement assertions below - which are the
+    actual subject of GG-006 - would never be reached.
+    """
+    espn_feed(
+        team_events={"359": HOME_HISTORY, "360": AWAY_HISTORY},
+        league_events=HOME_HISTORY + AWAY_HISTORY,
+    )
+
+
 @pytest.fixture
 def generous_odds(monkeypatch):
     """Attractive odds on both sides, so a wrongly-passed fixture would be recommended."""
+
     monkeypatch.setattr(shared.odds, "find_odds_for_match", lambda *a, **k: 1.80)
     monkeypatch.setattr(main, "get_btts_odds", lambda **k: 1.80)
 
@@ -134,8 +170,8 @@ class TestGG006GoalsAverageSemantics:
         these two ever stopped straddling the threshold, the tests below would
         pass vacuously.
         """
-        scoring_rate = 3 / 10          # what the filter must see
-        combined = (5 + 30) / 20       # what main.py used to send
+        scoring_rate = 3 / 10  # what the filter must see
+        combined = (5 + 30) / 20  # what main.py used to send
 
         assert scoring_rate < MIN_AVG_GOALS
         assert combined > MIN_AVG_GOALS
@@ -190,22 +226,49 @@ class TestIdenticalFilterConclusion:
         assert main_passed == analyze_passed
 
     def test_neither_entry_point_recommends_without_clean_sheet_data(
-        self, espn_stats, generous_odds
+        self, espn_stats, generous_odds, monkeypatch
     ):
         """
-        ESPN cannot supply clean-sheet rates, so with a COMPLETE response both
-        entry points must still refuse to recommend - despite generous odds and
-        a healthy probability. This is GG-002 closed end-to-end.
+        GG-002 end-to-end: an unavailable clean-sheet rate blocks BOTH scripts.
+
+        Epic 1B.4 changed where this rate comes from. It used to be structurally
+        impossible - ESPN's aggregates cannot express it, so it was permanently
+        unavailable and this test needed no setup. It is now derived from match
+        history, so unavailability has to be CAUSED rather than assumed.
+
+        Only the clean-sheet lookup is failed here, not the whole feed. Failing
+        the feed outright would also starve the model, the fixture would be
+        rejected before filters ran, and the test would pass without ever
+        reaching the assertion it exists to make.
         """
         espn_stats({"359": SOLID_AWAY, "360": SOLID_AWAY})
+        for module in (main, analyze_all):
+            monkeypatch.setattr(module, "get_team_history", lambda **kwargs: None)
         main_result, analyze_rows = run_both()
 
         assert main_result["decision"] == "NO BET"
         assert main_result["filter_outcome"] == "UNEVALUATED"
         assert all(row["filter_status"] == "FILTER_DATA_UNAVAILABLE" for row in analyze_rows)
-        assert all(
-            row["system_recommendation"] == "RECOMMEND_NO_PLAY" for row in analyze_rows
-        )
+        assert all(row["system_recommendation"] == "RECOMMEND_NO_PLAY" for row in analyze_rows)
+
+    def test_both_entry_points_agree_once_clean_sheet_data_exists(self, espn_stats, generous_odds):
+        """
+        The other side of the same coin, and the Epic 1B.4 payoff.
+
+        With a real history the rate is genuinely measured - 0% here, since both
+        sides conceded in every match - so the clean-sheet filter can finally be
+        EVALUATED rather than skipped. Both entry points must reach that state
+        together; if only one of them consumed the derived history, this fails.
+        """
+        espn_stats({"359": SOLID_AWAY, "360": SOLID_AWAY})
+        main_result, analyze_rows = run_both()
+
+        assert main_result["filter_outcome"] != "UNEVALUATED"
+        assert not main_result.get("filter_data_unavailable")
+        assert all(row["filter_status"] != "FILTER_DATA_UNAVAILABLE" for row in analyze_rows)
+
+        # And the verdict itself still agrees across the two scripts.
+        assert main_result["passes_filters"] == (analyze_rows[0]["filter_status"] == "PASSED")
 
     def test_probability_is_still_produced_by_both(self, espn_stats, generous_odds):
         """
@@ -223,10 +286,7 @@ class TestIdenticalFilterConclusion:
         # is presentation, not a modelling difference, so the tolerance matches
         # the rounding rather than pinning one representation over the other.
         gg_yes = next(r for r in analyze_rows if r["market"] == "GG_YES")
-        assert gg_yes["model_probability"] == pytest.approx(
-            main_result["gg_probability"], abs=1e-4
-        )
-
+        assert gg_yes["model_probability"] == pytest.approx(main_result["gg_probability"], abs=1e-4)
 
 
 class TestSharedBoundaryIsTheOnlyInterpreter:

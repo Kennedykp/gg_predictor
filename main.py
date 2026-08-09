@@ -23,19 +23,33 @@ from datetime import date, datetime
 from typing import List, Dict, Any
 
 from config import ALLOWED_LEAGUES
-from espn import get_fixtures, get_team_stats, get_league_avg_goals, get_team_history
+from espn import (
+    get_fixtures,
+    get_league_avg_goals,
+    get_league_baseline,
+    get_team_history,
+    get_team_stats,
+    get_team_venue_averages,
+)
+
 
 from odds_api import get_btts_odds
 from poisson import calculate_gg_probability
 from decision import make_decision
 from output import print_results, write_csv, write_json
-from domain import (
-    LeagueStats,
-    TeamStats,
-    evaluate_filters,
-    validate_poisson_inputs,
+# `validate_poisson_inputs` / `LeagueStats` / `TeamStats` are no longer imported
+# here: they validated the CURRENT-SEASON aggregate dicts that used to feed the
+# model. `build_fixture_poisson_inputs` returns a contract that carries its own
+# completeness check, so the same guarantee is enforced one layer earlier and on
+# point-in-time data. The legacy contract remains in `domain.validation` for the
+# aggregate path and its tests.
+from domain import evaluate_filters
+
+from shared.match_history import (
+    build_fixture_filter_stats,
+    build_fixture_poisson_inputs,
 )
-from shared.match_history import build_fixture_filter_stats
+
 
 
 
@@ -73,33 +87,54 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
         result["rejection_reasons"].append("Missing or unreliable team stats")
         return result
 
-    # Validate the five required POISSON_V1 inputs BEFORE calling the model.
-    # GG-001 (Epic 1B.1): this guard existed before but could never fire, because
-    # the provider converted every absent statistic to 0. Now that absence is
-    # represented as None, incomplete data is refused instead of being modelled.
+    # ------------------------------------------------------------------
+    # POINT-IN-TIME MODEL INPUTS (Epic 1B.5, LEAK-001).
     #
-    # Nothing is substituted here - no zero, no league average, no other team's
-    # figures. An unavailable input means no prediction for this fixture.
-    # CALCULATED since Epic 1B.2 (GG-003 resolved). get_league_avg_goals() no
-    # longer substitutes 1.35 - it computes the figure from real ESPN standings
-    # or returns None - so a value arriving here is genuinely measured, and an
-    # unavailable one arrives as None and stops the prediction below.
-    validation = validate_poisson_inputs(
-        league=(
-            LeagueStats.calculated(fixture["league_id"], league_avg_goals)
-            if league_avg_goals is not None
-            else LeagueStats.unavailable(fixture["league_id"])
-        ),
-        home_team=TeamStats.from_provider_dict(home_stats),
-        away_team=TeamStats.from_provider_dict(away_stats),
+    # All five POISSON_V1 inputs are now derived from completed matches that
+    # kicked off STRICTLY BEFORE this fixture, replacing ESPN's current-season
+    # aggregates. Those aggregates describe the season as it stands TODAY, so
+    # scoring a fixture from 1 December with them fed the model results from
+    # January, February and March - the future, presented as evidence.
+    #
+    # The five quantities are semantically unchanged; only their provenance
+    # moved. `league_avg_goals` is still goals per TEAM per match, each team is
+    # still described by its own venue, and `poisson.py` is untouched.
+    #
+    # `league_avg_goals` (from standings) is still fetched above and passed in,
+    # but is now used only as a diagnostic comparison; it is NOT what the model
+    # consumes. See TASK 26 in docs/EPIC_1B5_POINT_IN_TIME_INPUTS.md.
+    # ------------------------------------------------------------------
+    model_inputs = build_fixture_poisson_inputs(
+        fixture,
+        get_team_venue_averages,
+        get_league_baseline,
     )
 
-    if not validation.is_complete:
-        result["rejection_reasons"].append(validation.reason())
+    if not model_inputs.is_complete:
+        # No fallback to the current-season aggregates. Reaching for them here
+        # would fire exactly when history is thin - early season, promoted
+        # sides, obscure leagues - and silently restore the leak in the cases
+        # least likely to be checked. Unavailable is the honest answer.
+        result["rejection_reasons"].append(
+            "Point-in-time model inputs unavailable: "
+            + ", ".join(model_inputs.missing)
+        )
+        result["model_input_samples"] = {
+            "home": model_inputs.home_sample,
+            "away": model_inputs.away_sample,
+            "league": model_inputs.league_sample,
+        }
         return result
 
-    model_inputs = validation.inputs
-    assert model_inputs is not None  # guaranteed by is_complete
+    # Sample sizes travel with the prediction (TASK 17). A lambda built from one
+    # match and one built from nineteen are not equally trustworthy, and the
+    # float alone cannot say which it is. No minimum is imposed here - that is a
+    # calibration decision for a later Epic, not a threshold to introduce quietly.
+    result["model_input_samples"] = {
+        "home": model_inputs.home_sample,
+        "away": model_inputs.away_sample,
+        "league": model_inputs.league_sample,
+    }
 
     # Calculate GG probability using Poisson model
     poisson_result = calculate_gg_probability(
@@ -109,6 +144,7 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
         away_goals_scored_away=model_inputs.away_goals_scored_away,
         away_goals_conceded_away=model_inputs.away_goals_conceded_away,
     )
+
 
     if poisson_result is None:
         result["rejection_reasons"].append("Failed to calculate probability")

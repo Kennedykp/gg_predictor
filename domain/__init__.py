@@ -44,6 +44,14 @@ from domain.match_records import (
     derive_history,
     eligible_history,
 )
+from domain.poisson_inputs import (
+    LeagueBaseline,
+    PointInTimePoissonInputs,
+    VenueGoalAverages,
+    build_poisson_inputs,
+    derive_league_baseline,
+    derive_venue_averages,
+)
 from domain.stats import (
     LEGACY_FALLBACK_LEAGUE_AVERAGE,
     LeagueAverageSource,
@@ -93,4 +101,18 @@ __all__ = [
     "DerivedHistory",
     "derive_history",
     "eligible_history",
+    # point-in-time model inputs (Epic 1B.5)
+    #
+    # `PointInTimePoissonInputs` is deliberately NOT named `PoissonInputs`:
+    # `domain.validation` already exports that name for the validated tuple the
+    # model is called with. Two same-named contracts differing only in
+    # provenance would be a genuine hazard, since the whole point of this Epic
+    # is that provenance is the difference.
+    "PointInTimePoissonInputs",
+    "VenueGoalAverages",
+    "LeagueBaseline",
+    "derive_venue_averages",
+    "derive_league_baseline",
+    "build_poisson_inputs",
 ]
+
