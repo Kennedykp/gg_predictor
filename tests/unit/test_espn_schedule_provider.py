@@ -27,6 +27,10 @@ TARGET_KICKOFF = datetime(2026, 8, 15, 14, 0, tzinfo=timezone.utc)
 TEAM = "83"        # the team whose perspective we derive
 OPPONENT = "360"
 LEAGUE = "esp.1"
+# The season these tests request. `resolve_season` maps the current date to it,
+# and every stub event is labelled with it, because Epic 2B.1 requires an event
+# to state its own season before it can be believed.
+SEASON = 2026
 
 
 def _event(
@@ -66,6 +70,9 @@ def _event(
         "id": event_id,
         "date": kickoff,
         "league": {"slug": league_slug},
+        # Epic 2B.1: real events always state their season, and the provider now
+        # requires it. SEASON is the module constant these tests request.
+        "season": {"year": SEASON, "displayName": f"{SEASON}-{str(SEASON + 1)[-2:]} Test League"},
         "competitions": [
             {
                 "id": event_id,

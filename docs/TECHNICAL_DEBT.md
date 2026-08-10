@@ -4,10 +4,11 @@ Prioritised. Items marked ✅ RESOLVED were fixed in the Epic named on the headi
 still open and the recommendation stands. Original problem text is kept verbatim under each resolved
 item — resolutions are **appended, not substituted**, so the history stays readable.
 
-**Counts:** 4 CRITICAL (3 RESOLVED) · 7 HIGH (2 RESOLVED) · 8 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
+**Counts:** 5 CRITICAL (4 RESOLVED) · 8 HIGH (2 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
 · 1 leakage risk (counted within CRITICAL, open)
 
-**Status: 27 items tracked · 9 RESOLVED · 18 open.**
+**Status: 30 items tracked · 10 RESOLVED · 20 open.**
+
 
 | Epic | Resolved | Items |
 |---|---|---|
@@ -16,7 +17,10 @@ item — resolutions are **appended, not substituted**, so the history stays rea
 | 1B.3 — filter wiring | 2 | GG-002, GG-006 |
 | 1B.4 — match history | 0 | GG-002-B narrowed (clean-sheet feed built); nothing closed |
 | 1B.5 — point-in-time model inputs | 0 | LEAK-001 narrowed to odds only; GG-024 superseded in practice; nothing closed |
-| **Total** | **9** | 18 remain open, incl. LEAK-001 and R3-001 |
+| 2A — cold-start research | 0 | Read-only audit; **found GG-025**, fixed in 2B.1 |
+| 2B.1 — season integrity | 1 | GG-025; opened GG-026, GG-027 |
+| **Total** | **10** | 20 remain open, incl. LEAK-001 and R3-001 |
+
 
 
 
@@ -32,6 +36,16 @@ now exists (derived from ESPN match-level schedule records), leaving knockout-fi
 heavy-favourite mismatch still without a source. GG-024 gains a finding: the **schedule** endpoint
 does honour `season=`, though the **team-statistics** endpoint still does not, so GG-024 stays open.
 LEAK-001 is **explicitly not** closed — see its entry.
+
+Found in Epic 2A (read-only audit), fixed in Epic 2B.1: **GG-025** (CRITICAL) — historical season
+membership was defined by a constructed July→June date window rather than by provider season
+metadata, which deleted 221 real fixtures and injected the same 221 into the following season.
+
+New in Epic 2B.1: **GG-026** (HIGH, open) — whether promotion/relegation playoff fixtures belong in
+a regular-season team-strength dataset is an undecided modelling policy, deliberately not settled
+inside provider parsing. **GG-027** (MEDIUM, open) — ESPN's eng.1 2009/10 metadata is
+self-contradictory and the season is refused rather than imported.
+
 
 
 
@@ -189,7 +203,55 @@ LEAK-001 is **explicitly not** closed — see its entry.
     `tests/unit/test_espn_provider.py`. Live re-verification: `scripts/espn_diagnostic.py`, which
     probes both paths side by side so the 200-with-`{}` failure is reproducible on demand.
 
+### GG-025 — Season membership was defined by a date window, not by season identity — ✅ RESOLVED (Epic 2B.1)
+- **Component:** ESPN provider (historical retrieval) · **Found:** Epic 2A · **Fixed:** Epic 2B.1
+- **Problem:** `espn._season_date_range(season)` built a fixed `{season}0701-{season+1}0630` window and
+  every event the window returned was treated as belonging to that season. Date-range membership was
+  the *definition* of season membership; no event metadata was consulted.
+- **Evidence:** Measured across 5 production leagues × 4 seasons from the Epic 2A cache. Seasons that
+  ran past 30 June were truncated, and the same fixtures were admitted into the following season:
+
+  | league | season | true | old rule | lost | wrongly admitted |
+  |---|---|---|---|---|---|
+  | eng.1 | 2019 | 380 | 314 | 66 | 0 |
+  | eng.1 | 2020 | 380 | 446 | 0 | 66 |
+  | ita.1 | 2019 | 380 | 282 | 98 | 0 |
+  | ita.1 | 2020 | 380 | 478 | 0 | 98 |
+  | esp.1 | 2019 | 380 | 323 | 57 | 0 |
+  | esp.1 | 2020 | 380 | 437 | 0 | 57 |
+
+  **221 real fixtures deleted; the same 221 injected into the wrong season.** Three clubs relegated
+  after 2019/20 (Bournemouth 349, Norwich 381, Watford 395) appeared inside 2020/21 results.
+- **Impact:** Every historical dataset, backtest, calibration and cold-start measurement built on this
+  retrieval would have been contaminated — and invisibly so, because 14 of the 20 audited
+  league-seasons were unaffected and returned exactly the expected 380/306.
+- **RESOLVED — Epic 2B.1.** Season identity is now taken from the **event**, not the calendar.
+  - **Discovery and validation are separate.** `_season_discovery_windows()` returns a deliberately
+    broad candidate range (the season's window plus the following one); membership is decided solely by
+    `domain/season_identity.classify_event_season()`, the single chokepoint.
+  - **A wider window was explicitly rejected as the fix.** It cannot work: eng.1 2019/20 ended
+    2020-07-26 and eng.1 2020/21 began 2020-09-12, so no boundary separates them for all leagues in
+    all seasons — and widening the season's own window necessarily widens the next one, which is what
+    caused the contamination. ESPN also refuses ranges over 366 days (`dates` +1 day → **HTTP 400**),
+    so the option does not exist even if it were correct.
+  - **`season.year` is corroborated, not trusted blindly.** Where `season.slug` encodes a season and
+    contradicts `season.year`, the event is **refused**. This is not hypothetical: eng.1's 2009 window
+    carries 380 events labelled `season.year = 2009` with slug `2013-2014-…` and **wrong scores**
+    (Chelsea 0-1 Hull for a match that finished 2-1). 45,657 corpus events agree; 380 disagree and are
+    now rejected rather than imported as fabricated history.
+  - **Fails closed.** Missing, non-integer, boolean or contradictory season metadata yields
+    `UNVERIFIABLE`. Nothing is inferred from kickoff, team membership, calendar year or the requested
+    season, and `0` is never substituted.
+  - **Competition identity is a separate invariant**, checked independently from `event.uid`
+    (scoreboard) or `event.league.slug` (schedule).
+  - **Verified live:** eng.1 2019 → 380 records, 66 July fixtures preserved; eng.1 2020 → 380 records,
+    relegated clubs absent, zero leakage. Current-season retrieval still issues one request.
+  - **Regression-protected:** `tests/regression/test_season_integrity.py` (73 tests) keeps the old rule
+    stated as an explicit function and asserts it gives the wrong answer on real data. Mutation-tested:
+    7 weakenings of the guard, **7 killed**. Detail: `docs/EPIC_2B1_SEASON_INTEGRITY.md`.
+
 ### R3-001 — Run-3 is mathematically incapable of producing a selection
+
 - **Component:** Run-3 decision logic
 - **Problem:** Both decision branches are unreachable.
   - **R3-NO:** requires `P_R3_NO ≥ 0.78`. Since `P_R3_NO = (1-p³)(1-(1-p)³)`, which is maximised at
@@ -399,11 +461,47 @@ LEAK-001 is **explicitly not** closed — see its entry.
   that serves history does not fix a statistics endpoint that does not.
 
 
+### GG-026 — Playoff/postseason inclusion is an undecided modelling policy
+- **Component:** Historical dataset / modelling policy · **Opened:** Epic 2B.1 · **OPEN**
+- **Problem:** ESPN places promotion/relegation playoff fixtures in the **same competition** and the
+  **same `season.year`** as the league programme, distinguished only by `season.slug`. Whether they
+  belong in a dataset used for **regular-season** team-strength modelling is a statistical question,
+  and no answer is currently recorded.
+- **Evidence:** `promotionrelegation-playoffs` / `promotion-playoff-quarterfinals` in fra.1 (6 events
+  across 20 seasons), `relegation-playoff` in ita.1 2022/23 (1 event: Spezia 1-3 Hellas Verona,
+  2023-06-11 — a genuine third meeting, not a duplicate), and ~100 events in eng.2. **Material impact
+  on production leagues today: ≈7 matches.**
+- **Why it was not decided in the provider:** the obvious rule ("keep only `regular-season`") would
+  **delete an entire legitimate Bundesliga season** — ESPN labels 303 ordinary ger.1 2010/11 fixtures
+  `group-stage`. A policy that destroys real data to exclude 7 matches is not a parsing default.
+- **Current behaviour — unchanged from before Epic 2B.1:** the phase is captured as
+  `MatchRecord.season_phase` (provenance) and **never filters**. Nothing is excluded and nothing is
+  silently included that was not included before.
+- **Decision required (product/statistical, not provider):** should promotion/relegation playoff
+  fixtures be included in regular-season team-strength datasets? **Recommendation:** exclude, as a
+  different competitive context — but implemented at dataset-construction level in Epic 2B.2 using
+  `season_phase`, with per-league validation, **not** inside provider parsing.
+
+### GG-027 — ESPN's eng.1 2009/10 season metadata is self-contradictory
+- **Component:** ESPN provider (historical data quality) · **Opened:** Epic 2B.1 · **OPEN**
+- **Problem:** 380 events in eng.1's 2009 window carry `season.year = 2009` alongside
+  `season.slug = "2013-2014-barclays-premier-league"`. Spot-checked against real results, the block is
+  corrupt at source: it repeats the 2009-10 fixture list with **wrong scores** (Chelsea 0-1 Hull, for
+  a match that really finished 2-1).
+- **Impact:** The season is **refused** by the Epic 2B.1 fail-closed rule (`UNVERIFIABLE`), so it is
+  unusable rather than wrong — which is the correct outcome. Trusting `season.year` alone would have
+  imported 380 fabricated results into the historical dataset.
+- **Scope:** Bounded. 380 of 45,657 corpus events with a season-encoding slug disagree; the other
+  45,657 agree. Only matters if history before 2010 is wanted.
+- **Action:** None required for Epic 2B.2 (which targets 2010 onwards). If pre-2010 history is ever
+  needed, source it from a second provider and cross-check — do not relax the veto.
+
 ---
 
 ## MEDIUM
 
 ### GG-010 — Run-3 duplicates the entire ESPN client, league map and λ formula
+
 `run3/main_run3.py:37-230` re-implements `espn.py` plus `poisson.py`'s λ formula and a 36-league map.
 Bug fixes must be applied twice; the two copies can drift silently.
 **Action:** shared provider + shared λ once the regression tests exist.
@@ -533,17 +631,24 @@ output directory; `git rm --cached` the artefacts.
 
 | Component | CRITICAL | HIGH | MEDIUM | LOW |
 |---|---|---|---|---|
-| ESPN provider | ✅ GG-001, ✅ GG-003 | ✅ GG-004, GG-005, GG-024 | ✅ GG-012, ✅ GG-013, ✅ GG-014 | ✅ GG-020 |
+| ESPN provider | ✅ GG-001, ✅ GG-003, ✅ GG-025 | ✅ GG-004, GG-005, GG-024 | ✅ GG-012, ✅ GG-013, ✅ GG-014, GG-027 | ✅ GG-020 |
 | Filters / entry points | ✅ GG-002 | ✅ GG-006 · GG-002-B (open) | GG-015 | GG-021 |
 | Run-3 | R3-001 | — | GG-010, GG-011 | — |
 | Odds | — | GG-007, GG-008 | GG-016, GG-017 | GG-019 |
 | Dead providers | — | GG-009 | — | GG-018 |
-| Storage / evaluation | LEAK-001 | — | — | — |
+| Storage / evaluation | LEAK-001 | GG-026 | — | — |
 | Tooling | — | — | — | GG-022, GG-023 |
 
-**Open by severity (18 total):** 1 CRITICAL (R3-001) + LEAK-001 · 6 HIGH (GG-002-B, GG-005,
-GG-007, GG-008, GG-009, GG-024) · 5 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017) · 5 LOW (GG-018,
-GG-019, GG-021, GG-022, GG-023).
+**Open by severity (20 total):** 1 CRITICAL (R3-001) + LEAK-001 · 7 HIGH (GG-002-B, GG-005,
+GG-007, GG-008, GG-009, GG-024, GG-026) · 6 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017, GG-027)
+· 5 LOW (GG-018, GG-019, GG-021, GG-022, GG-023).
+
+**New in Epic 2B.1.** GG-025 is **closed and regression-protected** — event-level season identity is
+authoritative, date-only membership is impossible, and 7 of 7 mutations were killed. Two items were
+**opened rather than silently decided**: GG-026 (playoff inclusion is a modelling policy, ≈7 matches
+in production leagues) and GG-027 (eng.1 2009/10 is corrupt at source and is refused). Nothing
+unrelated was closed.
+
 
 
 **Carried forward from Epic 1B.2** (capability landed, not yet consumed): GG-013 and GG-014 are
