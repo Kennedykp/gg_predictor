@@ -80,6 +80,14 @@ def utc(year: int, month: int, day: int, hour: int = 15, minute: int = 0) -> dat
     return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
 
 
+#: Sentinel for "build an event with NO season block at all".
+#: Distinct from None, which means "fill in the season implied by the request".
+#: Real ESPN events always carry season metadata (0 of 53,934 in the Epic 2A
+#: corpus lacked it), so a payload without it is a malformed-provider scenario
+#: and must be requested explicitly rather than produced by accident.
+OMIT = "__omit__"
+
+
 def espn_event(
     event_id: str,
     kickoff: datetime,
@@ -91,6 +99,8 @@ def espn_event(
     status_name: str = "STATUS_FULL_TIME",
     state: str = "post",
     completed: bool = True,
+    season_year: Any = None,
+    season_label: Any = None,
 ) -> Dict[str, Any]:
     """
     One ESPN event, shaped as the live feed shapes it.
@@ -98,6 +108,14 @@ def espn_event(
     Scores are nested under `{"value": ...}` because that is what the schedule
     endpoint actually returns; passing None omits the score entirely, which is
     how a genuinely missing score is simulated.
+
+    SEASON METADATA (Epic 2B.1). `season_year=None` leaves the season block off
+    HERE and lets the feed stub fill it in from the request, which is what the
+    real API does - a response to `?season=2019` contains events labelled 2019.
+    That keeps every existing test describing coherent data without restating
+    the season in each one. Pass `season_year` explicitly to build a
+    wrong-season event, or `season_year=OMIT` to build one with no season
+    metadata at all; both must be REJECTED by the provider.
     """
 
     def competitor(team_id: str, goals: Optional[int], home_away: str) -> Dict[str, Any]:
@@ -110,10 +128,11 @@ def espn_event(
             entry["score"] = {"value": float(goals), "displayValue": str(goals)}
         return entry
 
-    return {
+    event: Dict[str, Any] = {
         "id": event_id,
         "date": kickoff.strftime("%Y-%m-%dT%H:%MZ"),
         "league": {"slug": league},
+        "uid": f"s:600~l:700~e:{event_id}",
         "competitions": [
             {
                 "id": event_id,
@@ -132,15 +151,75 @@ def espn_event(
         ],
     }
 
+    if season_year is not OMIT and season_year is not None:
+        season: Dict[str, Any] = {"year": season_year}
+        if season_label is not None and season_label is not OMIT:
+            season["slug"] = season_label
+        event["season"] = season
+    elif season_label is not None and season_label is not OMIT:
+        # A label with no year: metadata that exists but cannot identify a
+        # season, which must fail closed rather than be half-trusted.
+        event["season"] = {"slug": season_label}
 
-def schedule_payload(events: List[Dict[str, Any]], league: str = "eng.1") -> Dict[str, Any]:
-    """An ESPN team-schedule response."""
-    return {"events": events, "requestedSeason": {"year": 2025}, "season": {"year": 2025}}
+    return event
 
 
-def scoreboard_payload(events: List[Dict[str, Any]], league: str = "eng.1") -> Dict[str, Any]:
-    """An ESPN league-scoreboard response."""
-    return {"events": events, "leagues": [{"slug": league}]}
+def _stamp_season(event: Dict[str, Any], season_year: int, league: str) -> Dict[str, Any]:
+    """
+    Fill in the season block the real feed would have carried, if absent.
+
+    This mirrors ESPN rather than convenience-patching the tests: a response to
+    a request for season S labels its events S. An event that already states a
+    season is left EXACTLY as the test built it, so wrong-season and
+    missing-season fixtures survive the stub untouched.
+    """
+    if "season" in event:
+        return event
+    stamped = dict(event)
+    stamped["season"] = {
+        "year": season_year,
+        "slug": f"{season_year}-{str(season_year + 1)[-2:]}-{league.replace('.', '-')}",
+    }
+    return stamped
+
+
+def schedule_payload(
+    events: List[Dict[str, Any]],
+    league: str = "eng.1",
+    season: int = 2025,
+) -> Dict[str, Any]:
+    """
+    An ESPN team-schedule response.
+
+    `season` names the season the request asked for, and events that do not
+    state their own are labelled with it - exactly as the live endpoint behaves.
+    Note that live payloads also carry a top-level `season` describing the
+    CURRENT season regardless of what was requested (measured: a 2019 request
+    answers with `season.year = 2026`), which is why nothing reads it.
+    """
+    return {
+        "events": [_stamp_season(e, season, league) for e in events],
+        "requestedSeason": {"year": season},
+        "season": {"year": 2026},
+    }
+
+
+def scoreboard_payload(
+    events: List[Dict[str, Any]],
+    league: str = "eng.1",
+    season: int = 2025,
+) -> Dict[str, Any]:
+    """
+    An ESPN league-scoreboard response.
+
+    Carries `leagues[0].id` as well as the slug because scoreboard events have
+    no per-event league object; the id is what the per-event `uid` check
+    compares against.
+    """
+    return {
+        "events": [_stamp_season(e, season, league) for e in events],
+        "leagues": [{"slug": league, "id": "700", "season": {"year": 2026}}],
+    }
 
 
 @pytest.fixture
@@ -172,13 +251,27 @@ def espn_feed(monkeypatch):
                 return espn.FetchResult(
                     error=espn.ESPNError.SERVER_ERROR, detail="stubbed failure"
                 )
+            # Which season did the caller ask for? The schedule endpoint says so
+            # directly; the scoreboard says so through its discovery window.
+            # Answering with a season the caller did not request is what the
+            # real feed does NOT do, so the stub does not either.
+            requested = (params or {}).get("season")
+            if requested is None:
+                dates = str((params or {}).get("dates") or "")
+                requested = int(dates[:4]) if dates[:4].isdigit() else 2025
+            requested = int(requested)
+
             if "/schedule" in url:
                 for team_id, events in team_events.items():
                     if f"/teams/{team_id}/" in url:
-                        return espn.FetchResult(data=schedule_payload(events))
-                return espn.FetchResult(data=schedule_payload([]))
+                        return espn.FetchResult(
+                            data=schedule_payload(events, season=requested)
+                        )
+                return espn.FetchResult(data=schedule_payload([], season=requested))
             if "/scoreboard" in url:
-                return espn.FetchResult(data=scoreboard_payload(league_events or []))
+                return espn.FetchResult(
+                    data=scoreboard_payload(league_events or [], season=requested)
+                )
             return espn.FetchResult(
                 error=espn.ESPNError.HTTP_ERROR, detail=f"unstubbed URL: {url}"
             )

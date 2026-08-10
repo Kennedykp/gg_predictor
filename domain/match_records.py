@@ -77,6 +77,28 @@ class MatchRecord:
     construction rather than at comparison time, because the failure mode
     otherwise is a TypeError deep inside the cutoff or - worse - a silent
     misordering if someone "helpfully" strips the tzinfo (TASK 10).
+
+    SEASON PROVENANCE (Epic 2B.1)
+    -----------------------------
+    `season` is the season the PROVIDER stated for this event, not one inferred
+    from `kickoff`. The two are not interchangeable: the COVID-extended 2019/20
+    season ran to 2020-08-02, so a kickoff-derived season would file those
+    matches under 2020/21 next to clubs that had already been relegated. It is
+    recorded rather than recomputed precisely so that nobody has to re-derive
+    it later from the one field that is known to lie about it.
+
+    `season_phase` is the provider's own label for the stage ('regular-season',
+    'promotion-final', and - unhelpfully - 'group-stage' on 303 ordinary
+    Bundesliga fixtures). It is PROVENANCE, not a filter: whether playoffs
+    belong in a league dataset is a modelling decision, and this field exists so
+    that decision can be taken with the data in view instead of being smuggled
+    into a parser. See docs/EPIC_2B1_SEASON_INTEGRITY.md.
+
+    `provider` names who said all this, so a record's claims can be traced to a
+    source when two providers eventually disagree.
+
+    All three default to None, so a record whose provenance is unknown says so
+    instead of borrowing someone else's.
     """
 
     venue: str
@@ -88,6 +110,9 @@ class MatchRecord:
     competition: Optional[str] = None
     team_id: Optional[str] = None
     opponent_id: Optional[str] = None
+    season: Optional[int] = None
+    season_phase: Optional[str] = None
+    provider: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.kickoff is not None and self.kickoff.tzinfo is None:

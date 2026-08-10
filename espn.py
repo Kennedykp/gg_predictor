@@ -40,6 +40,13 @@ from domain.poisson_inputs import (
     derive_league_baseline,
     derive_venue_averages,
 )
+from domain.season_identity import (
+    SeasonIdentity,
+    SeasonVerdict,
+    classify_event_season,
+)
+
+PROVIDER_NAME = "espn"
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +560,89 @@ def _parse_score(competitor: Dict[str, Any]) -> Optional[int]:
     return goals
 
 
+def extract_season_identity(
+    event: Dict[str, Any],
+    payload_competition: Optional[str] = None,
+) -> SeasonIdentity:
+    """
+    Read one ESPN event's own statement of which competition-season it is.
+
+    THE ESPN-SPECIFIC HALF of season identity; the rules live in
+    `domain.season_identity`. Nothing here decides membership - it only
+    transcribes what the payload says, including saying nothing.
+
+    Field notes, all measured against 53,934 events across 140 cached
+    league-seasons (Epic 2A corpus) plus live probes:
+
+      - `season.year` is present on every event on both endpoints, and is the
+        season's STARTING year (2019 == 2019/20). This is the primary field.
+
+      - `season.slug` appears on the scoreboard endpoint only. It is the
+        corroborating field: sometimes a season ('2019-20-english-premier-
+        league'), sometimes a phase ('regular-season'). Both are passed on and
+        the domain layer decides which it is.
+
+      - `season.displayName` is what the SCHEDULE endpoint carries instead of a
+        slug ('2019-20 English Premier League'), and it encodes the season in
+        the same leading form, so it serves as the corroborating field there.
+
+      - COMPETITION comes from the event's own `league.slug` where present
+        (schedule endpoint), falling back to the payload-level declaration
+        (scoreboard endpoint, `leagues[0].slug`). Note that the fallback is a
+        weaker claim - it describes the response, not the event - but it is
+        still the provider speaking, unlike the URL we happened to request.
+
+    No defaulting anywhere: a field ESPN omits arrives as None so the classifier
+    can refuse it, rather than being quietly replaced by the value we wanted.
+    """
+    season = event.get("season")
+    if not isinstance(season, dict):
+        season = {}
+
+    raw_year = season.get("year")
+    # A string year is still ESPN stating a year; a float, bool or junk is not.
+    season_year: Optional[int] = None
+    if isinstance(raw_year, int) and not isinstance(raw_year, bool):
+        season_year = raw_year
+    elif isinstance(raw_year, str) and raw_year.strip().isdigit():
+        season_year = int(raw_year.strip())
+
+    slug = season.get("slug")
+    display_name = season.get("displayName")
+    label = slug if isinstance(slug, str) and slug else display_name
+
+    competition = ((event.get("league") or {}).get("slug")) or payload_competition
+
+    return SeasonIdentity(
+        competition=competition or None,
+        season_year=season_year,
+        season_label=label if isinstance(label, str) and label else None,
+        phase=slug if isinstance(slug, str) and slug else None,
+    )
+
+
+def _uid_league_id(uid: Any) -> Optional[str]:
+    """
+    The league id ESPN embeds in an event `uid`, or None if it says none.
+
+    Format observed on every scoreboard event: "s:600~l:700~e:541530", where
+    s: is the sport, l: the league and e: the event. It is the only per-event
+    competition statement the scoreboard endpoint makes, so it is worth reading
+    even though it usually just confirms the payload header.
+    """
+    if not isinstance(uid, str):
+        return None
+    for part in uid.split("~"):
+        if part.startswith("l:") and len(part) > 2:
+            return part[2:]
+    return None
+
+
 def parse_schedule_events(
     payload: Dict[str, Any],
     team_id: str,
     league_code: str,
+    season: Optional[int] = None,
 ) -> List[MatchRecord]:
     """
     Convert an ESPN team-schedule payload into MatchRecords for `team_id`.
@@ -572,14 +658,36 @@ def parse_schedule_events(
       - the perspective team's `homeAway` is exactly "home" or "away"
       - a parseable, non-negative, integral score for BOTH sides
       - a parseable kickoff timestamp
+      - when `season` is given: ESPN's own season metadata says the event
+        belongs to it (Epic 2B.1)
 
     Skipping is silent by design: a schedule legitimately contains matches this
     pipeline cannot use, and a warning per event would drown the run. What is
     never done is substituting a default for any of the above.
+
+    `season` is OPTIONAL here and validation only runs when it is supplied.
+    That is not a loophole, it is the honest contract: this function receives a
+    payload, not a request, so when no caller states which season was asked for
+    there is no proposition to test. Every production path
+    (`get_team_match_records`) always supplies it.
     """
     records: List[MatchRecord] = []
 
     for event in payload.get("events") or []:
+        # SEASON + COMPETITION VALIDATION (Epic 2B.1), before any parsing work.
+        # First because it is the cheapest way to be wrong: a perfectly parsed
+        # record from the wrong season is worse than no record at all, since
+        # downstream it is indistinguishable from a right one.
+        identity = extract_season_identity(event)
+        if season is not None:
+            verdict = classify_event_season(
+                identity,
+                expected_competition=league_code,
+                requested_season=season,
+            )
+            if verdict is not SeasonVerdict.ACCEPTED:
+                continue
+
         competitions = event.get("competitions") or []
         if not competitions:
             continue
@@ -652,6 +760,11 @@ def parse_schedule_events(
                 competition=((event.get("league") or {}).get("slug")) or None,
                 team_id=str(team_id),
                 opponent_id=str(opponent_id) if opponent_id is not None else None,
+                # Provenance (Epic 2B.1): ESPN's stated season, not one derived
+                # from `kickoff`, and not the season we asked for.
+                season=identity.season_year,
+                season_phase=identity.phase,
+                provider=PROVIDER_NAME,
             )
         )
 
@@ -717,7 +830,9 @@ def get_team_match_records(
             print(f"ESPN schedule empty for {league_code}/{team_id} season={season}")
         return None
 
-    records = parse_schedule_events(result.data or {}, team_id, league_code)
+    # `season` is forwarded, never re-derived: the records cached under this key
+    # must be the season the key names (Epic 2B.1 cache safety).
+    records = parse_schedule_events(result.data or {}, team_id, league_code, season=season)
     _schedule_cache[cache_key] = records
     return records
 
@@ -734,19 +849,52 @@ _SCOREBOARD_LIMIT = 1000
 
 def _season_date_range(season: int) -> str:
     """
-    ESPN `dates=` range covering one football season.
+    The PRIMARY discovery window for a season. A DISCOVERY aid, nothing more.
 
-    A "2025" season means 2025/26, so the window runs July 2025 to June 2026 -
-    wide enough for early qualifiers and a late final, and narrow enough that it
-    cannot reach into an adjacent season. The season boundary is what keeps
-    2025/26 results out of a 2026/27 baseline (TASK 22).
+    A "2025" season means 2025/26, so this window runs July 2025 to June 2026.
+    It is where most of that season's fixtures live, which makes it a good place
+    to look - and NOT a definition of membership. Epic 2B.1 established that
+    treating it as a definition both truncated the COVID-extended 2019/20 season
+    and imported 2019/20 fixtures into 2020/21. Membership is decided per event
+    by `classify_event_season`; see `_season_discovery_windows`.
     """
     return f"{season}0701-{season + 1}0630"
+
+
+def _season_discovery_windows(season: int, today: Optional[date] = None) -> List[str]:
+    """
+    Every `dates=` window that might CONTAIN fixtures from `season`.
+
+    DISCOVERY, explicitly separated from VALIDATION (Epic 2B.1). Discovery is
+    allowed to be generous and approximate - its only job is to make sure no
+    real fixture goes unseen. Validation is exact and is the sole authority on
+    what is kept.
+
+    Why two windows rather than one wider one: ESPN rejects a `dates=` range
+    longer than 366 days with HTTP 400 (measured - 20190701-20200630 answers
+    200, the same range plus a single day answers 400). So "just widen the
+    window" is not merely the wrong fix conceptually, it is unavailable. Two
+    consecutive one-year windows cover a season that overruns its own year:
+
+        season 2019 -> ['20190701-20200630', '20200701-20210630']
+
+    The 2019/20 season finished on 2020-07-26 (eng.1), 2020-08-02 (ita.1) and
+    2020-08-04 (eng.2). Those matchdays are only visible in the SECOND window,
+    and 314 + 66 = 380 eng.1 fixtures were recovered exactly that way.
+
+    A window that starts after today is dropped: it cannot contain a played
+    fixture, and requesting it would spend a request to learn nothing. That also
+    keeps the ordinary current-season path at one request, as before.
+    """
+    today = today or date.today()
+    windows = [_season_date_range(season), _season_date_range(season + 1)]
+    return [w for w in windows if int(w.split("-")[0][:4]) <= today.year]
 
 
 def parse_scoreboard_events(
     payload: Dict[str, Any],
     league_code: str,
+    season: Optional[int] = None,
 ) -> List[MatchRecord]:
     """
     Convert an ESPN league-scoreboard payload into one MatchRecord per fixture.
@@ -760,16 +908,45 @@ def parse_scoreboard_events(
     Rejection rules are identical to the team-schedule parser - completed status,
     two competitors, both scores parseable, kickoff present - because a match
     that is not trustworthy evidence for a team is not trustworthy evidence for a
-    league either.
+    league either. When `season` is supplied, ESPN's own event-level season
+    metadata must also agree (Epic 2B.1); this endpoint is where the July-June
+    window did its damage, because one calendar window genuinely does straddle
+    two seasons.
     """
     records: List[MatchRecord] = []
 
-    # The feed's own declaration of which competition this response covers, used
-    # only when an event does not carry its own league slug.
+    # The feed's own declaration of which competition this response covers.
+    # Scoreboard events carry NO per-event `league` object (0 of 53,934 in the
+    # Epic 2A corpus), so this is the only statement of competition available
+    # here - which is exactly why the per-event uid check below matters.
     leagues = payload.get("leagues") or []
     payload_slug = (leagues[0].get("slug") if leagues else None) or None
+    payload_league_id = str((leagues[0].get("id") if leagues else "") or "") or None
 
     for event in payload.get("events") or []:
+        # SEASON + COMPETITION VALIDATION (Epic 2B.1). Runs before parsing for
+        # the same reason as in the schedule parser.
+        identity = extract_season_identity(event, payload_competition=payload_slug)
+        if season is not None:
+            verdict = classify_event_season(
+                identity,
+                expected_competition=league_code,
+                requested_season=season,
+            )
+            if verdict is not SeasonVerdict.ACCEPTED:
+                continue
+
+            # COMPETITION, independently of the payload's own claim. `uid` looks
+            # like "s:600~l:700~e:541530", where l: is the league id. Comparing
+            # it to `leagues[0].id` catches an event that the response
+            # ATTRIBUTES to this competition but that identifies itself with
+            # another - a claim no season check would ever notice. Zero
+            # violations in the Epic 2A corpus, which is the point: it is a
+            # tripwire, and it currently reports the feed is consistent.
+            uid_league = _uid_league_id(event.get("uid"))
+            if payload_league_id and uid_league and uid_league != payload_league_id:
+                continue
+
         competitions = event.get("competitions") or []
         if not competitions:
             continue
@@ -820,6 +997,10 @@ def parse_scoreboard_events(
                 competition=((event.get("league") or {}).get("slug")) or payload_slug,
                 team_id=str(home_id) if home_id is not None else None,
                 opponent_id=str(away_id) if away_id is not None else None,
+                # Provenance (Epic 2B.1): what ESPN said, not what we asked for.
+                season=identity.season_year,
+                season_phase=identity.phase,
+                provider=PROVIDER_NAME,
             )
         )
 
@@ -853,6 +1034,12 @@ def get_league_match_records(
 
     Returns None on provider failure - never an empty list, which would be
     indistinguishable from a league that has genuinely not started (TASK 15).
+
+    DISCOVERY THEN VALIDATION (Epic 2B.1). Candidate events are gathered from
+    every calendar window that could hold this season's fixtures, and each is
+    then admitted only on ESPN's own event-level season metadata. The windows
+    decide what we LOOK AT; the metadata decides what we KEEP. An empty list is
+    still a real answer, and still distinct from None.
     """
     if season is None:
         season = resolve_season(league_code)
@@ -862,29 +1049,45 @@ def get_league_match_records(
         return _league_cache[cache_key]
 
     url = f"{ESPN_BASE_URL}/{league_code}/scoreboard"
-    result = _fetch(
-        url,
-        params={"dates": _season_date_range(season), "limit": _SCOREBOARD_LIMIT},
-    )
+    records: List[MatchRecord] = []
+    seen_event_ids: set = set()
 
-    if not result.ok:
-        return None
+    for window in _season_discovery_windows(season):
+        result = _fetch(url, params={"dates": window, "limit": _SCOREBOARD_LIMIT})
 
-    payload = result.data or {}
-    records = parse_scoreboard_events(payload, league_code)
+        if not result.ok:
+            # A failed window means we cannot know what it held. Returning the
+            # other window's records would present a partial season as a whole
+            # one - the precise failure mode this Epic exists to remove - so the
+            # whole request fails instead.
+            return None
 
-    # Truncation guard. If ESPN returned exactly the cap, the response was
-    # probably cut short and the baseline would be computed from an arbitrary
-    # slice of the season. Refusing is correct: a silently partial league average
-    # divides every lambda in the run by a wrong number, and unlike a failed
-    # request it would leave no trace.
-    if len(payload.get("events") or []) >= _SCOREBOARD_LIMIT:
-        print(
-            f"ESPN scoreboard for {league_code} season={season} hit the "
-            f"{_SCOREBOARD_LIMIT}-event limit; refusing a possibly truncated "
-            "league baseline"
-        )
-        return None
+        payload = result.data or {}
+
+        # Truncation guard, per window. If ESPN returned exactly the cap, the
+        # response was probably cut short and the baseline would be computed
+        # from an arbitrary slice of the season. Refusing is correct: a silently
+        # partial league average divides every lambda in the run by a wrong
+        # number, and unlike a failed request it would leave no trace.
+        if len(payload.get("events") or []) >= _SCOREBOARD_LIMIT:
+            print(
+                f"ESPN scoreboard for {league_code} season={season} hit the "
+                f"{_SCOREBOARD_LIMIT}-event limit; refusing a possibly truncated "
+                "league baseline"
+            )
+            return None
+
+        for record in parse_scoreboard_events(payload, league_code, season=season):
+            # Windows overlap at the seam, so one fixture can be discovered
+            # twice. Deduplicated on the provider's event id - the identity ESPN
+            # itself assigns - rather than on (date, teams), which would also
+            # collapse two genuinely different fixtures that happened to
+            # coincide.
+            if record.event_id is not None:
+                if record.event_id in seen_event_ids:
+                    continue
+                seen_event_ids.add(record.event_id)
+            records.append(record)
 
     _league_cache[cache_key] = records
     return records
