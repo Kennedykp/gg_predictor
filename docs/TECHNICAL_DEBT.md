@@ -4,10 +4,10 @@ Prioritised. Items marked ✅ RESOLVED were fixed in the Epic named on the headi
 still open and the recommendation stands. Original problem text is kept verbatim under each resolved
 item — resolutions are **appended, not substituted**, so the history stays readable.
 
-**Counts:** 5 CRITICAL (4 RESOLVED) · 8 HIGH (2 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
+**Counts:** 5 CRITICAL (4 RESOLVED) · 9 HIGH (3 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
 · 1 leakage risk (counted within CRITICAL, open)
 
-**Status: 30 items tracked · 10 RESOLVED · 20 open.**
+**Status: 31 items tracked · 11 RESOLVED · 20 open.**
 
 
 | Epic | Resolved | Items |
@@ -19,7 +19,9 @@ item — resolutions are **appended, not substituted**, so the history stays rea
 | 1B.5 — point-in-time model inputs | 0 | LEAK-001 narrowed to odds only; GG-024 superseded in practice; nothing closed |
 | 2A — cold-start research | 0 | Read-only audit; **found GG-025**, fixed in 2B.1 |
 | 2B.1 — season integrity | 1 | GG-025; opened GG-026, GG-027 |
-| **Total** | **10** | 20 remain open, incl. LEAK-001 and R3-001 |
+| 2B.2 — historical dataset | 1 | GG-026 (playoff policy decided at dataset level) |
+| 2B.3 — evaluation harness | 0 | Measurement only; **opened GG-028**; LEAK-001 narrowed no further |
+| **Total** | **11** | 20 remain open, incl. LEAK-001 and R3-001 |
 
 
 
@@ -343,6 +345,26 @@ self-contradictory and the season is refused rather than imported.
   n=13, 2.385 GF / 0.615 GA; Chelsea AWAY n=13, 1.923 GF / 1.154 GA — 13 matches, not the
   19 a full-season aggregate would supply, which is the cutoff visibly doing its job on real data.
 
+- **Update (Epic 2B.3) — STILL OPEN, narrowed no further. Probability quality is now measured;
+  betting value is still not.** Epic 2B.3 built a point-in-time evaluation harness and ran it over
+  7,234 real historical fixtures. Two things changed, and neither of them is the odds row:
+
+  1. Point 3 above ("no historical run has been executed, scored, or compared") **is now
+     satisfied for the probability**. POISSON_V1 has been replayed under a strict
+     `kickoff < target` cutoff and scored: Brier 0.2657, coverage 0.9614, against a naive
+     point-in-time base rate at 0.2479. The mechanics are no longer merely believed correct;
+     they have produced numbers.
+  2. The odds row of the table above is **unchanged and remains the blocker**. The harness is
+     forbidden by an import-level regression test from reaching odds, prices, edges, thresholds
+     or `decision.py` (`tests/regression/test_evaluation_leakage.py`). That firewall exists
+     precisely because a recommendation backtest would be the most attractive-looking and least
+     valid output the project could produce.
+
+  **The distinction to hold onto:** "how good is the probability" is answerable today and has been
+  answered. "Would these recommendations have made money" is not, because every historical edge
+  would be computed against a market that did not exist at kickoff. LEAK-001 closes when odds are
+  stored point-in-time, not before.
+
 
 
 ---
@@ -517,6 +539,38 @@ self-contradictory and the season is refused rather than imported.
 - **Action:** None required for Epic 2B.2 (which targets 2010 onwards). If pre-2010 history is ever
   needed, source it from a second provider and cross-check — do not relax the veto.
 
+### GG-028 — POISSON_V1 returns exactly 0% BTTS on thin venue evidence
+- **Component:** Model (`poisson.py`) · **Opened:** Epic 2B.3 (measurement) · **OPEN**
+- **Problem:** A venue average of `0.0` propagates to `lambda = 0.0`, and `P(both teams score)` is then
+  **exactly 0.0**. A team whose only prior away match was a 0-goal loss is assigned a **0% chance** of
+  scoring — an absolute claim derived from a single observation.
+- **Evidence:** Direct call, no harness involved:
+  `calculate_gg_probability(league_avg_goals=1.35, home_goals_scored_home=1.0,
+  home_goals_conceded_home=1.0, away_goals_scored_away=0.0, away_goals_conceded_away=1.0)`
+  → `lambda_away = 0.0`, `gg_probability = 0.0`. In eng.1 2019 this produced **17** predictions of
+  exactly 0.0, and **BTTS actually occurred in 11 of them**.
+- **Impact:** Measured over 7,234 fixtures (Epic 2B.3), POISSON_V1 scores **Brier 0.2657** against a
+  naive point-in-time base rate at **0.2479** — worse than the trivial reference. The deficit is
+  concentrated in thin evidence, not in the formula generally:
+
+  | Prior venue matches | n | Brier |
+  |---|---|---|
+  | 1–2 | 40 | **0.4241** |
+  | 3–5 | 60 | 0.2687 |
+  | 6–9 | 80 | 0.2611 |
+  | 10+ | 180 | **0.2555** |
+
+  With 10+ matches the model is competitive; with 1–2 it is catastrophic. Log loss (1.09 vs 0.69) is
+  dominated by the exact-zero predictions, which are punished at the epsilon clamp.
+- **Not a data bug and not a harness bug.** This was checked before being recorded: the inputs are
+  correct point-in-time derivations, and `poisson.py` reproduces the result when called directly.
+  It is the model's genuine behaviour on small samples.
+- **Deliberately NOT fixed in Epic 2B.3.** Changing `poisson.py` while measuring it would destroy the
+  baseline. **This is the primary input to Epic 2C**, which must decide — as an explicit product
+  choice, not a parsing default — whether to floor λ, shrink toward a prior, or leave thin-evidence
+  fixtures unevaluable. Note that the third option **lowers coverage in exchange for calibration**,
+  and on this evidence buying coverage cheaply would make the aggregate Brier worse.
+
 ---
 
 ## MEDIUM
@@ -657,12 +711,20 @@ output directory; `git rm --cached` the artefacts.
 | Run-3 | R3-001 | — | GG-010, GG-011 | — |
 | Odds | — | GG-007, GG-008 | GG-016, GG-017 | GG-019 |
 | Dead providers | — | GG-009 | — | GG-018 |
-| Storage / evaluation | LEAK-001 | GG-026 | — | — |
+| Storage / evaluation | LEAK-001 | ✅ GG-026 | — | — |
+| Model (`poisson.py`) | — | GG-028 | — | — |
 | Tooling | — | — | — | GG-022, GG-023 |
 
 **Open by severity (20 total):** 1 CRITICAL (R3-001) + LEAK-001 · 7 HIGH (GG-002-B, GG-005,
-GG-007, GG-008, GG-009, GG-024, GG-026) · 6 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017, GG-027)
+GG-007, GG-008, GG-009, GG-024, GG-028) · 6 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017, GG-027)
 · 5 LOW (GG-018, GG-019, GG-021, GG-022, GG-023).
+
+**New in Epic 2B.3.** Nothing was closed — the Epic built the measurement, not a fix. **GG-028** is
+opened: POISSON_V1 measurably scores worse than a naive base rate (Brier 0.2657 vs 0.2479 over 7,234
+fixtures), concentrated in thin-evidence fixtures where a single goalless away match drives λ to 0 and
+the predicted probability to exactly 0%. `poisson.py` was deliberately left untouched — changing the
+model while measuring it would destroy the baseline Epic 2C needs. LEAK-001's odds row is unchanged and
+still blocks any recommendation backtest.
 
 **New in Epic 2B.1.** GG-025 is **closed and regression-protected** — event-level season identity is
 authoritative, date-only membership is impossible, and 7 of 7 mutations were killed. Two items were
