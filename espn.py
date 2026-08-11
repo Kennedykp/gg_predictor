@@ -33,6 +33,7 @@ from config import (
     ESPN_TIMEOUT_SECONDS,
     EUROPEAN_SEASON_ROLLOVER_MONTH,
 )
+from domain.historical import HistoricalMatch
 from domain.match_records import DerivedHistory, MatchRecord, Venue, derive_history
 from domain.poisson_inputs import (
     LeagueBaseline,
@@ -1091,6 +1092,230 @@ def get_league_match_records(
 
     _league_cache[cache_key] = records
     return records
+
+
+# ---------------------------------------------------------------------------
+# RAW HISTORICAL EXTRACTION (Epic 2B.2)
+#
+# Separate from `parse_scoreboard_events` on purpose. That function answers a
+# PRODUCTION question - "what completed matches may POISSON_V1 learn from right
+# now?" - and so it is right for it to drop everything it cannot use, silently.
+#
+# The historical dataset asks a different question: "what did ESPN say happened
+# in this league-season?" A postponed fixture is part of that answer. So is the
+# count of events that were refused, and why. Nothing below changes the
+# production path; `parse_scoreboard_events` is untouched.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class HistoricalReadout:
+    """
+    One league-season of raw history, plus an account of what was refused.
+
+    `rejected` is a reason -> count map rather than a single total because the
+    reasons are not interchangeable: WRONG_SEASON means discovery did its job
+    and validation did its job, while UNVERIFIABLE_SEASON means the provider
+    told us something we could not use. Collapsing them would hide the second
+    behind the first.
+    """
+
+    league: str
+    season: int
+    matches: List[HistoricalMatch]
+    rejected: Dict[str, int]
+
+    @property
+    def rejected_total(self) -> int:
+        return sum(self.rejected.values())
+
+
+def parse_scoreboard_history(
+    payload: Dict[str, Any],
+    league_code: str,
+    season: int,
+) -> HistoricalReadout:
+    """
+    Convert a scoreboard payload into raw HistoricalMatch records.
+
+    Season and competition identity are enforced exactly as in the production
+    parser - the same `classify_event_season` chokepoint, the same independent
+    uid check - because a historical dataset that admitted a fixture the live
+    path would reject would be a second, contradictory definition of season
+    membership. Epic 2B.1 exists to prevent precisely that.
+
+    What differs is completion. An event with no result is KEPT, with
+    `completed=False` and both scores None, because a postponed or abandoned
+    fixture is a real historical fact about the season. What is refused is a
+    CONTRADICTION: an event that claims to be complete but has no readable
+    score. Zero is never substituted for it.
+    """
+    matches: List[HistoricalMatch] = []
+    rejected: Dict[str, int] = {}
+
+    def reject(reason: str) -> None:
+        rejected[reason] = rejected.get(reason, 0) + 1
+
+    leagues = payload.get("leagues") or []
+    payload_slug = (leagues[0].get("slug") if leagues else None) or None
+    payload_league_id = str((leagues[0].get("id") if leagues else "") or "") or None
+
+    for event in payload.get("events") or []:
+        identity = extract_season_identity(event, payload_competition=payload_slug)
+        verdict = classify_event_season(
+            identity,
+            expected_competition=league_code,
+            requested_season=season,
+        )
+        if verdict is not SeasonVerdict.ACCEPTED:
+            reject(verdict.name)
+            continue
+
+        uid_league = _uid_league_id(event.get("uid"))
+        if payload_league_id and uid_league and uid_league != payload_league_id:
+            reject("UID_COMPETITION_MISMATCH")
+            continue
+
+        competitions = event.get("competitions") or []
+        if not competitions:
+            reject("NO_COMPETITION_BLOCK")
+            continue
+        competition = competitions[0]
+
+        competitors = competition.get("competitors") or []
+        if len(competitors) != 2:
+            reject("NOT_TWO_COMPETITORS")
+            continue
+
+        home = None
+        away = None
+        for competitor in competitors:
+            if competitor.get("homeAway") == "home":
+                home = competitor
+            elif competitor.get("homeAway") == "away":
+                away = competitor
+        if home is None or away is None:
+            reject("MISSING_HOME_AWAY_LABEL")
+            continue
+
+        kickoff = parse_kickoff(event.get("date") or competition.get("date"))
+        if kickoff is None:
+            reject("MISSING_KICKOFF")
+            continue
+
+        event_id = event.get("id") or competition.get("id")
+        if event_id is None:
+            reject("MISSING_EVENT_ID")
+            continue
+
+        home_id = home.get("id") or (home.get("team") or {}).get("id")
+        away_id = away.get("id") or (away.get("team") or {}).get("id")
+        if home_id is None or away_id is None:
+            reject("MISSING_TEAM_ID")
+            continue
+
+        status_type = ((competition.get("status") or {}).get("type")) or {}
+        completed = _is_completed_event(status_type)
+        home_goals = _parse_score(home)
+        away_goals = _parse_score(away)
+
+        # The one contradiction worth refusing: ESPN says the match finished but
+        # will not say how. Keeping it with a substituted zero would put a
+        # fabricated result into the historical record.
+        if completed and (home_goals is None or away_goals is None):
+            reject("COMPLETED_WITHOUT_SCORE")
+            continue
+
+        # An unfinished fixture carries no result, whatever partial numbers the
+        # payload happens to hold.
+        if not completed:
+            home_goals = None
+            away_goals = None
+
+        try:
+            matches.append(
+                HistoricalMatch(
+                    event_id=str(event_id),
+                    competition=league_code,
+                    season=identity.season_year if identity.season_year is not None else season,
+                    kickoff=kickoff,
+                    home_team_id=str(home_id),
+                    away_team_id=str(away_id),
+                    completed=completed,
+                    home_goals=home_goals,
+                    away_goals=away_goals,
+                    status=str(status_type.get("name")) if status_type.get("name") else None,
+                    home_team_name=(home.get("team") or {}).get("displayName"),
+                    away_team_name=(away.get("team") or {}).get("displayName"),
+                    season_phase=identity.phase,
+                    provider=PROVIDER_NAME,
+                )
+            )
+        except ValueError:
+            # The contract refused it. That is a rejection, not a crash, and not
+            # something to paper over by relaxing the contract.
+            reject("CONTRACT_VIOLATION")
+
+    return HistoricalReadout(
+        league=league_code,
+        season=season,
+        matches=matches,
+        rejected=rejected,
+    )
+
+
+def get_league_history(
+    league_code: str,
+    season: int,
+) -> Optional[HistoricalReadout]:
+    """
+    Raw history for one league-season, or None if the provider failed.
+
+    Discovery and de-duplication are identical to `get_league_match_records`,
+    including the rule that a failed window fails the whole request: a season
+    assembled from one of two windows is a partial season presented as a whole
+    one, which is the exact defect Epic 2B.1 removed.
+
+    None means "we do not know". An empty match list means "ESPN has nothing
+    here", which is a real and different answer (Epic 1B.2 error semantics).
+    """
+    url = f"{ESPN_BASE_URL}/{league_code}/scoreboard"
+    matches: List[HistoricalMatch] = []
+    rejected: Dict[str, int] = {}
+    seen_event_ids: set = set()
+
+    for window in _season_discovery_windows(season):
+        result = _fetch(url, params={"dates": window, "limit": _SCOREBOARD_LIMIT})
+        if not result.ok:
+            return None
+
+        payload = result.data or {}
+        if len(payload.get("events") or []) >= _SCOREBOARD_LIMIT:
+            print(
+                f"ESPN scoreboard for {league_code} season={season} hit the "
+                f"{_SCOREBOARD_LIMIT}-event limit; refusing a possibly truncated season"
+            )
+            return None
+
+        readout = parse_scoreboard_history(payload, league_code, season)
+        for reason, count in readout.rejected.items():
+            rejected[reason] = rejected.get(reason, 0) + count
+
+        for match in readout.matches:
+            # Windows overlap at the seam. De-duplicate on the provider's own
+            # event id, not on (date, teams), which would also collapse two
+            # genuinely distinct fixtures that happened to coincide.
+            if match.event_id in seen_event_ids:
+                continue
+            seen_event_ids.add(match.event_id)
+            matches.append(match)
+
+    return HistoricalReadout(
+        league=league_code,
+        season=season,
+        matches=matches,
+        rejected=rejected,
+    )
 
 
 def get_league_baseline(

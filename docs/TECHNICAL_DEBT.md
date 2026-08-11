@@ -461,8 +461,9 @@ self-contradictory and the season is refused rather than imported.
   that serves history does not fix a statistics endpoint that does not.
 
 
-### GG-026 — Playoff/postseason inclusion is an undecided modelling policy
-- **Component:** Historical dataset / modelling policy · **Opened:** Epic 2B.1 · **OPEN**
+### GG-026 — Playoff/postseason inclusion is an undecided modelling policy — ✅ RESOLVED (Epic 2B.2)
+- **Component:** Historical dataset / modelling policy · **Opened:** Epic 2B.1 · **Closed:** Epic 2B.2
+
 - **Problem:** ESPN places promotion/relegation playoff fixtures in the **same competition** and the
   **same `season.year`** as the league programme, distinguished only by `season.slug`. Whether they
   belong in a dataset used for **regular-season** team-strength modelling is a statistical question,
@@ -481,6 +482,26 @@ self-contradictory and the season is refused rather than imported.
   fixtures be included in regular-season team-strength datasets? **Recommendation:** exclude, as a
   different competitive context — but implemented at dataset-construction level in Epic 2B.2 using
   `season_phase`, with per-league validation, **not** inside provider parsing.
+- **RESOLVED — Epic 2B.2.** The recommendation was implemented exactly as scoped: at
+  dataset-construction level, from `season_phase`, outside provider parsing.
+  - **Decision recorded: excluded from model training, retained in the dataset.**
+    `domain/historical.classify_model_eligibility()` labels each record `ELIGIBLE` / `INELIGIBLE` /
+    `UNCERTAIN`; `model_dataset()` is a **view** that narrows at the point of use. Nothing is deleted,
+    so the decision is reversible by a later modelling Epic without re-fetching a single byte.
+  - **The rule matches on postseason markers, never on `phase != "regular-season"`** — the trap this
+    item warned about. Verified: the 303 `group-stage`-labelled ger.1 2010/11 fixtures remain
+    `ELIGIBLE`, and a regression test asserts that whole legitimate season is not deleted.
+  - **Measured on real data (cache replay, 5 leagues × 4 seasons, zero network):** fra.1 2018/19
+    returns **384** accepted records = 380 league + **4 promotion-playoff ties** (Paris FC–Lens
+    `STATUS_FINAL_PEN`, Troyes–Lens `STATUS_FINAL_AET`, Lens–Dijon ×2), all correctly `INELIGIBLE`
+    and all still on disk. Every other audited league-season matched its expected count exactly.
+  - **STATUS_FINAL_PEN is answered by this too:** the penalty-decided fixtures found in Epic 2A are
+    postseason ties, not league matches. "Has a final score" is therefore **not** treated as "valid
+    regular-season match" — completion semantics were left unchanged, and eligibility is a separate
+    axis, as this item required.
+  - **`UNCERTAIN` is not silently trained on.** An unrecognised phase is excluded from the model view
+    and reported in the build manifest, so "I do not know what this is" never becomes evidence.
+
 
 ### GG-027 — ESPN's eng.1 2009/10 season metadata is self-contradictory
 - **Component:** ESPN provider (historical data quality) · **Opened:** Epic 2B.1 · **OPEN**
