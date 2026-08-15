@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
 
 import poisson
+from domain.cold_start import estimate_inputs
 from domain.evaluation import (
     EVALUATION_SCHEMA_VERSION,
     BttsOutcome,
@@ -64,12 +65,14 @@ from domain.poisson_inputs import (
     derive_league_baseline,
     derive_venue_averages,
 )
+from domain.team_strength import ESTIMATOR_VERSION, EstimatorConfig
 
 __all__ = [
     "PredictionContext",
     "ModelPrediction",
     "ModelAdapter",
     "PoissonV1Adapter",
+    "PoissonV1ShrunkAdapter",
     "ReferenceBaseRateAdapter",
     "MODEL_REGISTRY",
     "register_model",
@@ -80,6 +83,8 @@ __all__ = [
     "write_artifacts",
     "SeasonPartition",
 ]
+
+
 
 
 @dataclass(frozen=True)
@@ -355,7 +360,88 @@ class PoissonV1Adapter:
         )
 
 
+class PoissonV1ShrunkAdapter:
+    """
+    Epic 2C: shrunk INPUTS, then the SAME POISSON_V1 formula (Part 13).
+
+    The only difference from `PoissonV1Adapter` is where the five inputs come
+    from: `domain.cold_start.estimate_inputs` instead of the raw venue
+    averages. `poisson.calculate_gg_probability` is called identically and is
+    not touched, so any difference in results is attributable to estimation
+    alone - which is the entire hypothesis under test.
+
+    Registered under a DIFFERENT model_id, never overwriting POISSON_V1, so both
+    arms can be replayed in one run and the baseline stays reproducible.
+
+    `config` is REQUIRED. There is no default, because a default would let a
+    parameter set that no search ever justified become the shipped one by
+    accident; the parameter search passes candidates explicitly and the frozen
+    selection is passed by the registry factory.
+    """
+
+    def __init__(self, config: EstimatorConfig, *, model_id: str = "POISSON_V1_SHRUNK_V1") -> None:
+        self.config = config
+        self.model_id = model_id
+        # The estimator version travels in the model version: the same wiring
+        # with different estimator mathematics must not produce artifacts that
+        # look comparable.
+        self.model_version = f"1.0.0+{ESTIMATOR_VERSION}"
+
+    def predict(self, context: PredictionContext) -> ModelPrediction:
+        estimated = estimate_inputs(
+            context.history,
+            competition=context.competition,
+            season=context.season,
+            target_kickoff=context.kickoff,
+            home_team_id=context.home_team_id,
+            away_team_id=context.away_team_id,
+            config=self.config,
+            exclude_event_id=context.event_id,
+        )
+        inputs = estimated.inputs
+        # Provenance travels on every record, scored or not (Part 5): a value in
+        # the artifacts can always be traced to observation, a previous-season
+        # team prior, a league prior, or a shrinkage of them.
+        provenance = ",".join(
+            f"{name}={label}" for name, label in sorted(estimated.provenance.items())
+        )
+
+        if not inputs.is_complete:
+            return ModelPrediction(
+                reason=UnevaluableReason.INSUFFICIENT_HISTORY,
+                detail=f"missing inputs: {','.join(inputs.missing)}",
+                home_sample=inputs.home_sample,
+                away_sample=inputs.away_sample,
+                league_sample=inputs.league_sample,
+            )
+
+        result = poisson.calculate_gg_probability(
+            league_avg_goals=float(inputs.league_avg_goals or 0.0),
+            home_goals_scored_home=float(inputs.home_goals_scored_home or 0.0),
+            home_goals_conceded_home=float(inputs.home_goals_conceded_home or 0.0),
+            away_goals_scored_away=float(inputs.away_goals_scored_away or 0.0),
+            away_goals_conceded_away=float(inputs.away_goals_conceded_away or 0.0),
+        )
+        if result is None:
+            return ModelPrediction(
+                reason=UnevaluableReason.MODEL_RETURNED_NONE,
+                detail=f"POISSON_V1 rejected its inputs; {provenance}",
+                home_sample=inputs.home_sample,
+                away_sample=inputs.away_sample,
+                league_sample=inputs.league_sample,
+            )
+
+        return ModelPrediction(
+            probability=float(result["gg_probability"]),
+            detail=provenance,
+            home_sample=inputs.home_sample,
+            away_sample=inputs.away_sample,
+            league_sample=inputs.league_sample,
+        )
+
+
 class ReferenceBaseRateAdapter:
+
     """
     A REFERENCE, not a model. The prior BTTS rate in this competition.
 

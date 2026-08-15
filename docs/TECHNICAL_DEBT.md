@@ -4,10 +4,11 @@ Prioritised. Items marked ✅ RESOLVED were fixed in the Epic named on the headi
 still open and the recommendation stands. Original problem text is kept verbatim under each resolved
 item — resolutions are **appended, not substituted**, so the history stays readable.
 
-**Counts:** 5 CRITICAL (4 RESOLVED) · 9 HIGH (3 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
+**Counts:** 5 CRITICAL (4 RESOLVED) · 10 HIGH (3 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
 · 1 leakage risk (counted within CRITICAL, open)
 
-**Status: 31 items tracked · 11 RESOLVED · 20 open.**
+**Status: 32 items tracked · 11 RESOLVED · 21 open.**
+
 
 
 | Epic | Resolved | Items |
@@ -21,7 +22,9 @@ item — resolutions are **appended, not substituted**, so the history stays rea
 | 2B.1 — season integrity | 1 | GG-025; opened GG-026, GG-027 |
 | 2B.2 — historical dataset | 1 | GG-026 (playoff policy decided at dataset level) |
 | 2B.3 — evaluation harness | 0 | Measurement only; **opened GG-028**; LEAK-001 narrowed no further |
-| **Total** | **11** | 20 remain open, incl. LEAK-001 and R3-001 |
+| 2C — cold-start estimator | 0 | GG-028 addressed via inputs (raw model unchanged); **opened GG-029** |
+| **Total** | **11** | 21 remain open, incl. LEAK-001 and R3-001 |
+
 
 
 
@@ -540,7 +543,9 @@ self-contradictory and the season is refused rather than imported.
   needed, source it from a second provider and cross-check — do not relax the veto.
 
 ### GG-028 — POISSON_V1 returns exactly 0% BTTS on thin venue evidence
-- **Component:** Model (`poisson.py`) · **Opened:** Epic 2B.3 (measurement) · **OPEN**
+- **Component:** Model (`poisson.py`) · **Opened:** Epic 2B.3 (measurement) ·
+  **ADDRESSED in Epic 2C via input estimation; STILL OPEN for the raw model**
+
 - **Problem:** A venue average of `0.0` propagates to `lambda = 0.0`, and `P(both teams score)` is then
   **exactly 0.0**. A team whose only prior away match was a 0-goal loss is assigned a **0% chance** of
   scoring — an absolute claim derived from a single observation.
@@ -570,10 +575,69 @@ self-contradictory and the season is refused rather than imported.
   choice, not a parsing default — whether to floor λ, shrink toward a prior, or leave thin-evidence
   fixtures unevaluable. Note that the third option **lowers coverage in exchange for calibration**,
   and on this evidence buying coverage cheaply would make the aggregate Brier worse.
+- **ADDRESSED — Epic 2C, by fixing the INPUTS rather than the model.** Of the three options above, the
+  second was chosen and implemented: shrink toward a prior. `poisson.py` is **byte-identical**.
+  - **Mechanism, not merely frequency.** `domain/team_strength.py` replaces the raw venue ratio with a
+    Gamma-Poisson posterior mean `λ̂ = (k·μ + Y)/(k + n)`. For `k > 0, μ > 0` the numerator contains
+    `k·μ > 0`, so `λ̂ > 0` for **any** `Y` including zero. The exact-zero probability is now
+    **arithmetically unreachable**, not just rare.
+  - **No clipping was added.** There is no `max(0.05, …)` anywhere in the Epic. The extremes disappear
+    because the estimate improved; had a clamp been introduced, those two explanations would be
+    indistinguishable.
+  - **A genuine zero remains evidence.** `Y = 0` still pulls the estimate down — it is not discarded —
+    it simply can no longer certify impossibility from one observation.
+  - **Measured on identical fixture intersections** (coverage differs between arms, so raw comparison
+    would be invalid): exact-`0.0` predictions **19 → 0** on validation 2020 (1802 fixtures) and
+    **17 → 0** on holdout 2023 (1726). The 1–2 bucket improves Brier 0.2884 → 0.2550 and log loss
+    **2.0186 → 0.7039**; the 10+ bucket is unharmed (0.2468 → 0.2448).
+  - **Still OPEN for the raw model.** `POISSON_V1` itself is unchanged and still returns exactly 0.0
+    when handed a `0.0` venue rate — deliberately, so the baseline stays reproducible.
+    `tests/regression/test_gg028_sparse_sample.py` asserts that original behaviour permanently and will
+    fail if anyone "fixes" `poisson.py`. The defect is avoided by never constructing that input, which
+    holds only for `POISSON_V1_SHRUNK_V1`; any caller using raw venue ratios reintroduces it.
+  - Detail: `docs/EPIC_2C_COLD_START_MODEL.md`.
+
+### GG-029 — POISSON_V1 has almost no discriminatory power, and loses to a constant
+- **Component:** Model (`poisson.py`) / input signal · **Opened:** Epic 2C · **OPEN**
+- **Problem:** The model barely ranks fixtures better than chance. Measured on development seasons
+  (2018–2019), **ROC AUC ≈ 0.535** — for the raw baseline **and for every shrinkage configuration
+  tested**, from `k=2` through `k=1000`. AUC depends only on the ordering of predictions, so this is
+  not a calibration artefact: the ordering itself carries almost no information.
+- **Evidence:** `research/epic2c_collapse_diagnostic.py` (reproducible, cache-backed, zero network):
+
+  | arm | mean | sd | min | max | AUC |
+  |---|---|---|---|---|---|
+  | baseline raw | 0.4700 | 0.1243 | 0.000 | 0.933 | 0.5354 |
+  | k=8 | 0.4955 | 0.0984 | 0.207 | 0.814 | 0.5383 |
+  | k=40 | 0.5264 | 0.0599 | 0.353 | 0.715 | 0.5405 |
+  | k=1000 | 0.5369 | 0.0470 | 0.430 | 0.650 | 0.5343 |
+
+  Observed BTTS base rate **0.5202**, so a **constant predictor scores Brier 0.2496** — better than
+  raw POISSON_V1's **0.2615** on the same fixtures.
+- **Impact, and why it matters more than GG-028:** two consequences follow directly.
+  1. **Brier is not a safe objective for tuning this model.** Because increasing prior strength
+     flattens predictions toward the base rate, minimising Brier drives `k → ∞`, i.e. toward "always
+     predict the base rate". Epic 2C's parameter search had **no interior optimum** for exactly this
+     reason, and `k` was therefore selected by method of moments rather than by score. Any future Epic
+     that optimises Brier alone will silently select a degenerate model **and it will look like a win**.
+  2. **Improved calibration is not improved forecasting.** Epic 2C's gains are real but are
+     error-removal, not skill. Presenting them as predictive improvement would be misleading.
+- **Not caused by shrinkage, and not fixable by it.** The baseline's AUC is equally poor, so the
+  deficit predates Epic 2C. Shrinkage adjusts magnitudes; it cannot create signal that the five inputs
+  never contained.
+- **Why this was not visible earlier:** Epic 2B.3 compared aggregate Brier across arms with **differing
+  coverage** and reported no discrimination metric. Only the identical-intersection comparison plus AUC
+  exposed it.
+- **Action:** (a) report AUC and the constant-predictor score alongside Brier in the harness
+  permanently, so a model that loses to a constant cannot look acceptable; (b) treat **discrimination**
+  as Epic 2D's objective — bivariate/Dixon-Coles dependence and team-level attack/defence parameters
+  attack this, whereas further prior tuning cannot. Do **not** respond by fitting a recalibration
+  layer: it would improve the score while leaving the ranking, and therefore the real problem, intact.
 
 ---
 
 ## MEDIUM
+
 
 ### GG-010 — Run-3 duplicates the entire ESPN client, league map and λ formula
 
@@ -712,12 +776,22 @@ output directory; `git rm --cached` the artefacts.
 | Odds | — | GG-007, GG-008 | GG-016, GG-017 | GG-019 |
 | Dead providers | — | GG-009 | — | GG-018 |
 | Storage / evaluation | LEAK-001 | ✅ GG-026 | — | — |
-| Model (`poisson.py`) | — | GG-028 | — | — |
+| Model (`poisson.py`) | — | GG-028 (addressed via inputs), GG-029 | — | — |
 | Tooling | — | — | — | GG-022, GG-023 |
 
-**Open by severity (20 total):** 1 CRITICAL (R3-001) + LEAK-001 · 7 HIGH (GG-002-B, GG-005,
-GG-007, GG-008, GG-009, GG-024, GG-028) · 6 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017, GG-027)
-· 5 LOW (GG-018, GG-019, GG-021, GG-022, GG-023).
+**Open by severity (21 total):** 1 CRITICAL (R3-001) + LEAK-001 · 8 HIGH (GG-002-B, GG-005,
+GG-007, GG-008, GG-009, GG-024, GG-028, GG-029) · 6 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017,
+GG-027) · 5 LOW (GG-018, GG-019, GG-021, GG-022, GG-023).
+
+**New in Epic 2C.** GG-028 is **addressed for the production path and left open for the raw model**:
+the Gamma-Poisson input estimator makes an exact-zero probability arithmetically unreachable
+(exact-`0.0` predictions 19→0 on validation, 17→0 on holdout, on identical fixture intersections), while
+`poisson.py` stays byte-identical so the baseline remains reproducible. **GG-029 is opened, and it is
+the more important finding:** AUC ≈0.535 for every arm including the baseline, and a constant predictor
+(0.2496) beats raw POISSON_V1 (0.2615) — so the Epic's Brier/log-loss gains are calibration, not skill,
+and Brier alone must not be used to select parameters. LEAK-001's odds row is untouched; the evaluation
+never reached odds or `decision.py`.
+
 
 **New in Epic 2B.3.** Nothing was closed — the Epic built the measurement, not a fix. **GG-028** is
 opened: POISSON_V1 measurably scores worse than a naive base rate (Brier 0.2657 vs 0.2479 over 7,234
