@@ -1,0 +1,49 @@
+stage: validation   target seasons: [2020]
+dataset matches: 5378   target fixtures: 1826
+frozen config: EstimatorConfig(k_goals_for=8.0, k_goals_against=16.0, k_prev_season=8.0, k_league=40.0, new_team_attack_factor=1.0, new_team_defence_factor=1.0)
+
+COVERAGE (raw, before any intersection)
+  target fixtures        1826
+  POISSON_V1_RAW scored  1802
+  POISSON_V1_SHRUNK_V1   1826
+  intersection           1802
+
+HEADLINE (identical intersection)
+arm                         Brier   logloss
+POISSON_V1_RAW             0.2600    0.8944
+POISSON_V1_SHRUNK_V1       0.2502    0.6941
+
+EVIDENCE BUCKETS (prior current-season venue matches, min of both sides)
+bucket        N  baseBrier   shrBrier   baseLogL    shrLogL  baseCal   shrCal  baseCov   shrCov
+0            87     0.2434     0.2384     1.0474     0.6698    0.073    0.096       87       87
+1-2         206     0.2961     0.2504     2.2056     0.6944    0.186    0.087      206      206
+3-5         293     0.2693     0.2551     0.7354     0.7048    0.140    0.062      293      293
+6-9         390     0.2551     0.2518     0.7042     0.6971    0.066    0.065      390      390
+10+         826     0.2517     0.2489     0.6975     0.6913    0.073    0.062      826      826
+
+EXTREME PROBABILITIES (identical intersection)
+metric                   baseline     shrunk
+scored                       1802       1802
+p <= 0.05                      19          0
+p >= 0.95                       1          0
+p == 0 exactly                 19          0
+p == 1 exactly                  0          0
+
+CALIBRATION (identical intersection)
+bin           baseN  basePred   baseObs   shrN   shrPred    shrObs
+0.0-0.1          19     0.000     0.526      0       n/a       n/a
+0.1-0.2           4     0.167     0.750      0       n/a       n/a
+0.2-0.3          71     0.268     0.521      9     0.278     0.667
+0.3-0.4         319     0.358     0.480    209     0.361     0.464
+0.4-0.5         521     0.453     0.524    562     0.456     0.521
+0.5-0.6         544     0.550     0.590    636     0.547     0.552
+0.6-0.7         273     0.640     0.615    361     0.636     0.637
+0.7-0.8          43     0.732     0.442     25     0.719     0.400
+0.8-0.9           5     0.841     0.400      0       n/a       n/a
+0.9-1.0           3     0.930     0.333      0       n/a       n/a
+
+NEW-TO-LEAGUE (promoted) FIXTURES - identical intersection
+flagged target fixtures: 464  in intersection: 440
+arm         scored    Brier   logloss   calErr
+baseline       440   0.2784    1.4886    0.111
+shrunk         440   0.2507    0.6950    0.040

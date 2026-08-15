@@ -1,0 +1,16 @@
+PROBABILITY SPREAD vs PRIOR STRENGTH (development seasons)
+Collapsing sd alongside falling Brier = degeneracy, not skill.
+
+arm                  mean       sd      min      max      AUC
+baseline raw       0.4700   0.1243    0.000    0.933   0.5354
+k=2                0.4670   0.1333    0.074    0.904   0.5373
+k=8                0.4955   0.0984    0.207    0.814   0.5383
+k=16               0.5104   0.0803    0.284    0.758   0.5380
+k=40               0.5264   0.0599    0.353    0.715   0.5405
+k=100              0.5341   0.0493    0.400    0.686   0.5408
+k=1000             0.5369   0.0470    0.430    0.650   0.5343
+
+observed BTTS base rate      0.5202
+constant-predictor Brier     0.2496
+A configuration whose Brier approaches this while sd approaches 0 has
+stopped discriminating between fixtures; it has not learned anything.
