@@ -1,0 +1,86 @@
+==========================================================================
+EPIC 2E  stage=0 CEILING PROBE  seasons=[2018, 2019]  leagues=['eng.1', 'ger.1', 'ita.1', 'esp.1', 'fra.1']
+==========================================================================
+
+##########################################################################
+# ALL ARMS BELOW ARE DELIBERATELY LEAKY. NONE IS A MODEL. NONE IS A
+# CANDIDATE. NO NUMBER HERE IS AN IMPROVEMENT OVER ANYTHING. They
+# bound the discrimination available from an information source.
+##########################################################################
+
+dataset matches=5486 missing_windows=0
+shot profiles=5486 available=5358
+targets=3656
+
+NOTE: season 2018 was already inspected as a target (Epic 2B.3 baseline / 2C search / 2D development).
+NOTE: season 2019 was already inspected as a target (Epic 2B.3 baseline / 2C search / 2D development).
+NOTE: holdout season 2025 was NOT loaded by this stage.
+
+PER-MATCH VALIDATION (are the statistics this match, or the season?)
+  block totalGoals == recorded score: 7057/7068  rate=0.9984
+  (a season-cumulative block would disagree grossly; this licenses
+   treating the fields as per-match observations)
+
+STANDALONE (each arm on the fixtures it scored; CI via paired
+bootstrap against a constant predictor, seed=20260815, iterations=2000)
+
+  ORACLE_LEAKY_GOALS
+      scored=3551/3656  coverage=97.1%
+      AUC=0.5838  95% CI [0.5648, 0.6024]
+      brier=0.2447  exact0=0 exact1=0
+
+  ORACLE_LEAKY_SHOTS_INSAMPLE
+      scored=3551/3656  coverage=97.1%
+      AUC=0.5737  95% CI [0.5545, 0.5919]
+      brier=0.2450  exact0=0 exact1=0
+
+  ORACLE_LEAKY_SHOTS_ACTUAL
+      scored=3530/3656  coverage=96.6%
+      AUC=0.7244  95% CI [0.7084, 0.7416]
+      brier=0.2164  exact0=182 exact1=0
+
+  ORACLE_LEAKY_SHOTS_EXCL_GOALS
+      scored=3530/3656  coverage=96.6%
+      AUC=0.5121  95% CI [0.4940, 0.5319]
+      brier=0.3201  exact0=538 exact1=0
+
+PAIRED COMPARISONS ON THE FAIR INTERSECTION
+(the goal-count ceiling is RE-MEASURED on these same fixtures, because
+ Epic 2D published its 0.5679 on eng.1 only - a cross-sample comparison
+ would be meaningless)
+
+  GOALS vs ORACLE_LEAKY_SHOTS_INSAMPLE: n=3551
+    AUC  goals=0.5838   ORACLE_LEAKY_SHOTS_INSAMPLE=0.5737
+    dAUC -0.0101  95% CI [-0.0221, 0.0021]  -> INDISTINGUISHABLE
+
+  GOALS vs ORACLE_LEAKY_SHOTS_ACTUAL: n=3530
+    AUC  goals=0.5839   ORACLE_LEAKY_SHOTS_ACTUAL=0.7244
+    dAUC 0.1405  95% CI [0.1181, 0.1626]  -> IMPROVEMENT
+
+  GOALS vs ORACLE_LEAKY_SHOTS_EXCL_GOALS: n=3530
+    AUC  goals=0.5839   ORACLE_LEAKY_SHOTS_EXCL_GOALS=0.5121
+    dAUC -0.0718  95% CI [-0.0963, -0.0475]  -> DEGRADATION
+
+==========================================================================
+STAGE 0 GATE
+==========================================================================
+  pre-registered threshold          : 0.6000 (immovable)
+  Epic 2D published goal ceiling    : 0.5679
+  goal ceiling re-measured here     : 0.5838
+  DECISIVE ARM (ORACLE_LEAKY_SHOTS_ACTUAL)
+    AUC=0.7244  95% CI [0.7084, 0.7416]  n=3530
+
+  CONFOUND CONTROL (ORACLE_LEAKY_SHOTS_EXCL_GOALS)
+    AUC=0.5121  95% CI [0.4940, 0.5319]  n=3530
+    Goals are a SUBSET of shots on target, so the decisive arm knows
+    part of the label outright (SOT==0 implies the team did not score).
+    This control removes scoring shots; what survives is attributable to
+    chance creation rather than to the outcome leaking through.
+
+  VERDICT: FAIL
+  because the raw upper bound (0.7244) clears the threshold only because goals are a subset of shots on target - it is reading part of the label. With scoring shots removed, the confound-controlled ceiling is 0.5121 CI [0.4940, 0.5319], entirely below the pre-registered 0.60, so the headroom is an artefact and not information an honest pre-match model could use.
+
+  Stage 1 is NOT to be built. Report the negative result and stop.
+
+REMINDER: a ceiling is an upper bound. Clearing it would not prove an
+honest model can reach it; failing it does prove none can.

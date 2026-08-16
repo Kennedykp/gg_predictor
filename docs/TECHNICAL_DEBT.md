@@ -4,10 +4,10 @@ Prioritised. Items marked ✅ RESOLVED were fixed in the Epic named on the headi
 still open and the recommendation stands. Original problem text is kept verbatim under each resolved
 item — resolutions are **appended, not substituted**, so the history stays readable.
 
-**Counts:** 5 CRITICAL (4 RESOLVED) · 11 HIGH (3 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
+**Counts:** 5 CRITICAL (4 RESOLVED) · 12 HIGH (3 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
 · 1 leakage risk (counted within CRITICAL, open)
 
-**Status: 33 items tracked · 11 RESOLVED · 22 open.**
+**Status: 34 items tracked · 11 RESOLVED · 23 open.**
 
 
 
@@ -25,7 +25,8 @@ item — resolutions are **appended, not substituted**, so the history stays rea
 | 2B.3 — evaluation harness | 0 | Measurement only; **opened GG-028**; LEAK-001 narrowed no further |
 | 2C — cold-start estimator | 0 | GG-028 addressed via inputs (raw model unchanged); **opened GG-029** |
 | 2D — discrimination research | 0 | Research only, nothing promoted; GG-029 confirmed on clean holdout; **opened GG-031** |
-| **Total** | **11** | 22 remain open, incl. LEAK-001 and R3-001 |
+| 2E — new-information research | 0 | Stage 0 only, **FAILED its own pre-registered gate**; nothing built, nothing promoted; **opened GG-032** |
+| **Total** | **11** | 23 remain open, incl. LEAK-001 and R3-001 |
 
 
 
@@ -682,6 +683,44 @@ self-contradictory and the season is refused rather than imported.
   probability discriminates better than 0.568 — which would establish whether the ceiling is a property
   of football or of *this feature set*. Note the market measurement is currently blocked by LEAK-001
   (odds are not stored point-in-time).
+- **UPDATE, Epic 2E:** the shot/xG half of that action is now **answered and closed** — see GG-032.
+  The ceiling is a property of **football**, not of goal counts. The market half remains open and is
+  still blocked by LEAK-001.
+
+### GG-032 — The ≈0.568 ceiling is CONVERSION variance, not a goal-count limitation
+- **Component:** Model class / feature set · **Opened:** Epic 2E · **OPEN (unfixable in kind — this is football)**
+- **Problem:** GG-031 left open whether the ceiling was a property of *goal counts* or of *football*.
+  Epic 2E answers it: **shot information does not beat it.** The limiting factor is the randomness of
+  **finishing**, not noise in the rate estimate, so no better pre-match estimator of chance creation
+  can help.
+- **Evidence:** `research/epic2e_experiment.py`, artifacts in `research/epic2e_results/`. Deliberately
+  leaky ceiling probes on 2018–19 (holdout 2025 never loaded), 5 leagues, n=3,530:
+
+  | arm (all **cheat**) | AUC | 95% CI |
+  |---|---|---|
+  | goal-count ceiling (2D's probe, re-measured) | 0.5838 | — |
+  | shot-strength, in-sample | 0.5737 | ΔAUC vs goals −0.0101, CI straddles 0 |
+  | actual shots on target, **raw** | **0.7244** | [0.7084, 0.7416] |
+  | actual shots on target, **confound-controlled** | **0.5121** | [0.4940, 0.5319] |
+
+  **The raw 0.7244 is an artefact and must not be quoted as headroom.** Every goal *is* a shot on
+  target, so `SOT == 0` proves that team did not score: the raw arm reads part of the label (182
+  exact-0.0 predictions). Removing scoring shots — leaving chances *created but not converted*, the
+  only part a pre-match model could forecast — collapses it to **0.5121**, a significant
+  **degradation** against goal counts (ΔAUC −0.0718, CI [−0.0963, −0.0475]).
+- **Impact:** Three directions are retired without further spend:
+  1. **Shots/shots-on-target models** — the ceiling is below the goal-count ceiling.
+  2. **xG** — xG is a weighted function of shots, so it is bounded by the same probe. No provider
+     purchase is justified on discrimination grounds.
+  3. **Better estimation generally** — in-sample perfect knowledge of shot profiles is
+     indistinguishable from goal counts, so the residual is not estimation error.
+- **What is NOT claimed:** only the shot channel is closed. A market price aggregates lineups,
+  injuries and motivation — information of a *different kind*, not a better estimate of the same
+  kind. It is untested and still blocked by LEAK-001.
+- **Action:** Stop trying to raise BTTS discrimination with match-statistics features. The remaining
+  candidate is the market probability, which requires point-in-time odds capture (LEAK-001) first.
+  Consider whether ranking is the right objective at all, given a constant predictor still wins on
+  Brier (GG-029).
 
 
 ---
@@ -827,12 +866,28 @@ output directory; `git rm --cached` the artefacts.
 | Dead providers | — | GG-009 | — | GG-018 |
 | Storage / evaluation | LEAK-001 | ✅ GG-026 | — | — |
 | Model (`poisson.py`) | — | GG-028 (addressed via inputs), GG-029 | — | — |
-| Model class / feature set | — | GG-031 | — | — |
+| Model class / feature set | — | GG-031, GG-032 | — | — |
 | Tooling | — | — | — | GG-022, GG-023 |
 
-**Open by severity (22 total):** 1 CRITICAL (R3-001) + LEAK-001 · 9 HIGH (GG-002-B, GG-005,
-GG-007, GG-008, GG-009, GG-024, GG-028, GG-029, GG-031) · 6 MEDIUM (GG-010, GG-011, GG-015, GG-016,
-GG-017, GG-027) · 5 LOW (GG-018, GG-019, GG-021, GG-022, GG-023).
+**Open by severity (23 total):** 1 CRITICAL (R3-001) + LEAK-001 · 10 HIGH (GG-002-B, GG-005,
+GG-007, GG-008, GG-009, GG-024, GG-028, GG-029, GG-031, GG-032) · 6 MEDIUM (GG-010, GG-011, GG-015,
+GG-016, GG-017, GG-027) · 5 LOW (GG-018, GG-019, GG-021, GG-022, GG-023).
+
+**New in Epic 2E.** Nothing was promoted and **nothing was even built** — Stage 0 was designed as a
+hard stop-gate and it stopped. **GG-032 is opened and it closes GG-031's open question:** the ≈0.568
+ceiling is a property of *football*, not of goal counts. A probe granted perfect knowledge of each
+fixture's actual shots on target appears to reach AUC 0.7244, but that number is a **definitional
+artefact** — every goal is a shot on target, so `SOT == 0` proves a team did not score and the probe was
+reading part of its own label (182 exact-`0.0` predictions). The confound-controlled arm, restricted to
+chances *created but not converted*, collapses to **0.5121** `[0.4940, 0.5319]` — a significant
+**degradation** versus goal counts (ΔAUC −0.0718, CI `[−0.0963, −0.0475]`). Knowing every team's shot
+profile perfectly in-sample is likewise indistinguishable from goal counts (ΔAUC −0.0101, CI straddling
+zero). The residual is **conversion variance**, which no pre-match feature can forecast. This retires
+shots, shots-on-target and — because xG is a weighted function of shots — **xG**, without buying a
+provider. The 2025 holdout was **never loaded**; `build_dataset` raises if a caller would pull it in.
+`competitor.form` was found to be **end-of-season contaminated** (a matchday-1 fixture carrying five
+prior results) and is banned by an allowlist plus 36 regression tests. Production, odds gating and
+Epic 2D's files are byte-identical.
 
 
 **New in Epic 2D.** Nothing was promoted; the Epic bought an *answer*, not a model. **GG-029 is
