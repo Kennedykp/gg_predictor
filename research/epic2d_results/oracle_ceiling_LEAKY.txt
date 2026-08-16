@@ -1,0 +1,23 @@
+==========================================================================
+EPIC 2D  stage=oracle  seasons=[2018, 2019]  leagues=['eng.1']
+==========================================================================
+dataset matches=8079 missing_windows=0
+WARNING: season 2018 was previously inspected (Epic 2A/2B.3/2C development); it is NOT untouched.
+WARNING: season 2019 was previously inspected (Epic 2A/2B.3/2C development); it is NOT untouched.
+
+##########################################################################
+# ORACLE CEILING PROBE - DELIBERATELY LEAKY - NOT A MODEL
+# Fitted on the FULL dataset including the target season and the target
+# fixture itself. These numbers are NOT predictions and NOT an
+# improvement over anything. They bound the discrimination available
+# from goal-count information under this model class.
+##########################################################################
+
+  ORACLE_LEAKY_CEILING       targets=  760 scored=  760 coverage=100.0%
+                             brier=0.2469 logloss=0.6868 auc=0.5654
+                             spread sd=0.0704 distinct=488 range=[0.275, 0.645]
+
+  On the intersection with POISSON_V1_RAW (n=748): baseline AUC=0.5229, LEAKY ceiling AUC=0.5679
+  INTERPRETATION: if the ceiling is close to the honest candidates, the
+  limit is the MODEL CLASS, not estimation noise, and better estimators
+  of the same quantities cannot help.
