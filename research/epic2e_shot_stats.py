@@ -157,9 +157,22 @@ class ShotProfile:
         return self.home.available and self.away.available
 
 
-def _stat_map(view: Mapping[str, Any]) -> Dict[str, str]:
-    """Allowlisted `name -> displayValue` for one competitor."""
-    out: Dict[str, str] = {}
+def _stat_map(view: Mapping[str, Any]) -> Dict[str, object]:
+    """
+    Allowlisted `name -> displayValue` for one competitor.
+
+    The value type is `object`, not `str`: `displayValue` is unvalidated provider
+    JSON and nothing guarantees its runtime type. Claiming `str` was a false
+    annotation - mypy was right to reject it - and coercing here would be worse,
+    because `str(None)` is the string `"None"`, which `_as_float` would then
+    reject as unparseable rather than as absent. Narrowing happens exactly once,
+    at the `_as_int` / `_as_float` boundary, which is total: both accept anything
+    and return None for whatever they cannot parse.
+
+    `object` rather than `Any` on purpose - `Any` would silently switch off
+    checking for every downstream read of this mapping.
+    """
+    out: Dict[str, object] = {}
     for entry in view.get("statistics") or []:
         if not isinstance(entry, Mapping):
             continue

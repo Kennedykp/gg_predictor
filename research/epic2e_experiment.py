@@ -103,7 +103,12 @@ from domain.goal_models import (  # noqa: E402
     predict_lambdas,
 )
 from domain.historical import HistoricalMatch  # noqa: E402
-from evaluation_harness import ModelPrediction, PredictionContext, replay  # noqa: E402
+from evaluation_harness import (  # noqa: E402
+    ModelAdapter,
+    ModelPrediction,
+    PredictionContext,
+    replay,
+)
 from research.epic2c_experiment import (  # noqa: E402
     TARGET_LEAGUES,
     load_season,
@@ -656,7 +661,14 @@ def run_stage0(leagues: Sequence[str], seasons: Sequence[int]) -> str:
     emit("   treating the fields as per-match observations)")
     emit("")
 
-    arms = {
+    # Annotated, not cast. The five arms are unrelated classes with no common
+    # base, so mypy infers `dict[str, object]` for the literal and `replay`
+    # rightly rejects `object`. Declaring the value type as the protocol
+    # `replay` actually requires makes mypy VERIFY each arm satisfies it -
+    # a cast would have asserted the same thing while checking nothing.
+    # `ModelAdapter` is a structural Protocol, so no arm needs to inherit
+    # anything; each already supplies `model_id`, `model_version` and `predict`.
+    arms: Dict[str, ModelAdapter] = {
         GoalOracleLeaky.model_id: GoalOracleLeaky(matches),
         ShotOracleLeaky.model_id: ShotOracleLeaky(matches, profiles),
         ShotOracleActual.model_id: ShotOracleActual(matches, profiles),

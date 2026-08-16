@@ -326,8 +326,13 @@ class TestShotSurrogateIsFaithful:
 
     def test_goals_are_replaced_by_shots_on_target(self) -> None:
         match = self._match()
-        profiles = {"401": shots.profile_from_event(_event(), "eng.1")}
-        surrogate = exp._shot_surrogate(match, profiles)
+        # Narrowed before use, rather than widening `_shot_surrogate` to accept
+        # Optional values. Its real callers receive `load_many`'s
+        # `Dict[str, ShotProfile]`, which never contains None, so accepting None
+        # would loosen a correct production contract to accommodate a test.
+        profile = shots.profile_from_event(_event(), "eng.1")
+        assert profile is not None
+        surrogate = exp._shot_surrogate(match, {"401": profile})
         assert surrogate is not None
         assert surrogate.home_goals == 5
         assert surrogate.away_goals == 5
@@ -338,12 +343,17 @@ class TestShotSurrogateIsFaithful:
 
     def test_unavailable_fixture_is_dropped_not_zeroed(self) -> None:
         match = self._match()
-        profiles = {
-            "401": shots.profile_from_event(
-                _event(possession="0.0", shots_total="0", on_target="0"), "eng.1"
-            )
-        }
-        assert exp._shot_surrogate(match, profiles) is None
+        profile = shots.profile_from_event(
+            _event(possession="0.0", shots_total="0", on_target="0"), "eng.1"
+        )
+        # The two assertions below are the point of this test, and narrowing for
+        # mypy made them explicit: a profile IS produced, it is merely
+        # UNAVAILABLE. So the surrogate drops the fixture because the statistics
+        # are unusable - not because the profile was missing, which is the
+        # separate case covered by `test_missing_profile_is_dropped`.
+        assert profile is not None
+        assert not profile.available
+        assert exp._shot_surrogate(match, {"401": profile}) is None
 
     def test_missing_profile_is_dropped(self) -> None:
         assert exp._shot_surrogate(self._match(), {}) is None
