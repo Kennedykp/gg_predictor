@@ -1,0 +1,82 @@
+==========================================================================
+EPIC 2D  stage=search  seasons=[2018, 2019]  leagues=['eng.1']
+==========================================================================
+dataset matches=8079 missing_windows=0
+WARNING: season 2018 was previously inspected (Epic 2A/2B.3/2C development); it is NOT untouched.
+WARNING: season 2019 was previously inspected (Epic 2A/2B.3/2C development); it is NOT untouched.
+
+targets=760 seasons=[2018, 2019] leagues=['eng.1']
+
+RAW COVERAGE AND STANDALONE METRICS
+  POISSON_V1_RAW             targets=  760 scored=  748 coverage= 98.4%
+                             brier=0.2616 logloss=0.8909 auc=0.5229
+                             spread sd=0.1229 distinct=743 range=[0.0, 0.83]
+                             refusals={'INSUFFICIENT_HISTORY': 12}
+  C1_MAHER                   targets=  760 scored=  736 coverage= 96.8%
+                             brier=0.2522 logloss=0.698 auc=0.5374
+                             spread sd=0.0862 distinct=736 range=[0.226, 0.73]
+                             refusals={'INSUFFICIENT_HISTORY': 24}
+  C3_DIXON_COLES             targets=  760 scored=  736 coverage= 96.8%
+                             brier=0.252 logloss=0.6976 auc=0.5378
+                             spread sd=0.0861 distinct=736 range=[0.229, 0.733]
+                             refusals={'INSUFFICIENT_HISTORY': 24}
+
+FAIR INTERSECTION COMPARISONS (AUC is the primary metric)
+
+  INTERSECTION POISSON_V1_RAW vs C1_MAHER: n=736  (raw scored 748/760 vs 736/760; left_only=12 right_only=0)
+    AUC        POISSON_V1_RAW=0.5253   C1_MAHER=0.5374
+    Brier      POISSON_V1_RAW=0.2591   C1_MAHER=0.2522   [constant base-rate benchmark=0.2499]
+    LogLoss    POISSON_V1_RAW=0.7574   C1_MAHER=0.698
+    Extremes   POISSON_V1_RAW: p<=0.05=1 p>=0.95=0 exact0=1 exact1=0 | C1_MAHER: p<=0.05=0 p>=0.95=0 exact0=0 exact1=0
+    calibration (intersection, high-confidence bins matter most):
+      [0.00, 0.10)   base n=    2 pred=0.037 obs=1.0 gap=0.963 | cand n=    0 pred=None obs=None gap=None
+      [0.10, 0.20)   base n=    8 pred=0.167 obs=0.125 gap=-0.042 | cand n=    0 pred=None obs=None gap=None
+      [0.20, 0.30)   base n=   50 pred=0.267 obs=0.44 gap=0.173 | cand n=   11 pred=0.273 obs=0.364 gap=0.09
+      [0.30, 0.40)   base n=  142 pred=0.359 obs=0.486 gap=0.127 | cand n=   95 pred=0.359 obs=0.484 gap=0.125
+      [0.40, 0.50)   base n=  245 pred=0.452 obs=0.547 gap=0.095 | cand n=  277 pred=0.452 obs=0.491 gap=0.039
+      [0.50, 0.60)   base n=  201 pred=0.547 obs=0.478 gap=-0.07 | cand n=  279 pred=0.541 obs=0.541 gap=0.001
+      [0.60, 0.70)   base n=   72 pred=0.635 obs=0.583 gap=-0.052 | cand n=   69 pred=0.632 obs=0.536 gap=-0.095
+      [0.70, 0.80)   base n=   12 pred=0.736 obs=0.583 gap=-0.152 | cand n=    5 pred=0.715 obs=0.2 gap=-0.515
+      [0.80, 0.90)   base n=    4 pred=0.825 obs=0.5 gap=-0.325 | cand n=    0 pred=None obs=None gap=None
+    dAUC       0.0122  95% CI [-0.021, 0.0435]  -> INDISTINGUISHABLE
+    dBrier     -0.0069  95% CI [-0.0133, -0.0]  (negative favours C1_MAHER)
+    by evidence bucket (prior venue matches, shared count):
+      0        n=   28  AUC 0.526 -> 0.357   Brier 0.2679 -> 0.2721
+      1-2      n=   68  AUC 0.67 -> 0.678   Brier 0.2456 -> 0.2333
+      10+      n=  360  AUC 0.51 -> 0.541   Brier 0.2557 -> 0.2494
+      3-5      n=  120  AUC 0.575 -> 0.526   Brier 0.2558 -> 0.258
+      6-9      n=  160  AUC 0.468 -> 0.486   Brier 0.2735 -> 0.2589
+
+  INTERSECTION POISSON_V1_RAW vs C3_DIXON_COLES: n=736  (raw scored 748/760 vs 736/760; left_only=12 right_only=0)
+    AUC        POISSON_V1_RAW=0.5253   C3_DIXON_COLES=0.5378
+    Brier      POISSON_V1_RAW=0.2591   C3_DIXON_COLES=0.252   [constant base-rate benchmark=0.2499]
+    LogLoss    POISSON_V1_RAW=0.7574   C3_DIXON_COLES=0.6976
+    Extremes   POISSON_V1_RAW: p<=0.05=1 p>=0.95=0 exact0=1 exact1=0 | C3_DIXON_COLES: p<=0.05=0 p>=0.95=0 exact0=0 exact1=0
+    calibration (intersection, high-confidence bins matter most):
+      [0.00, 0.10)   base n=    2 pred=0.037 obs=1.0 gap=0.963 | cand n=    0 pred=None obs=None gap=None
+      [0.10, 0.20)   base n=    8 pred=0.167 obs=0.125 gap=-0.042 | cand n=    0 pred=None obs=None gap=None
+      [0.20, 0.30)   base n=   50 pred=0.267 obs=0.44 gap=0.173 | cand n=   11 pred=0.278 obs=0.364 gap=0.085
+      [0.30, 0.40)   base n=  142 pred=0.359 obs=0.486 gap=0.127 | cand n=   86 pred=0.36 obs=0.488 gap=0.128
+      [0.40, 0.50)   base n=  245 pred=0.452 obs=0.547 gap=0.095 | cand n=  266 pred=0.452 obs=0.492 gap=0.04
+      [0.50, 0.60)   base n=  201 pred=0.547 obs=0.478 gap=-0.07 | cand n=  292 pred=0.542 obs=0.527 gap=-0.014
+      [0.60, 0.70)   base n=   72 pred=0.635 obs=0.583 gap=-0.052 | cand n=   75 pred=0.632 obs=0.56 gap=-0.072
+      [0.70, 0.80)   base n=   12 pred=0.736 obs=0.583 gap=-0.152 | cand n=    6 pred=0.716 obs=0.333 gap=-0.382
+      [0.80, 0.90)   base n=    4 pred=0.825 obs=0.5 gap=-0.325 | cand n=    0 pred=None obs=None gap=None
+    dAUC       0.0125  95% CI [-0.0204, 0.0438]  -> INDISTINGUISHABLE
+    dBrier     -0.0071  95% CI [-0.0135, -0.0003]  (negative favours C3_DIXON_COLES)
+    by evidence bucket (prior venue matches, shared count):
+      0        n=   28  AUC 0.526 -> 0.352   Brier 0.2679 -> 0.2722
+      1-2      n=   68  AUC 0.67 -> 0.679   Brier 0.2456 -> 0.2321
+      10+      n=  360  AUC 0.51 -> 0.541   Brier 0.2557 -> 0.2495
+      3-5      n=  120  AUC 0.575 -> 0.525   Brier 0.2558 -> 0.2577
+      6-9      n=  160  AUC 0.468 -> 0.487   Brier 0.2735 -> 0.2583
+
+SEASON SPLITS (candidate vs baseline, same intersection each)
+  2018 C1_MAHER         n=  368  AUC 0.5017 -> 0.5224
+  2018 C3_DIXON_COLES   n=  368  AUC 0.5017 -> 0.523
+  2019 C1_MAHER         n=  368  AUC 0.5519 -> 0.5579
+  2019 C3_DIXON_COLES   n=  368  AUC 0.5519 -> 0.558
+
+LEAGUE SPLITS
+  eng.1  C1_MAHER         n=  736  AUC 0.5253 -> 0.5374
+  eng.1  C3_DIXON_COLES   n=  736  AUC 0.5253 -> 0.5378

@@ -4,10 +4,11 @@ Prioritised. Items marked ✅ RESOLVED were fixed in the Epic named on the headi
 still open and the recommendation stands. Original problem text is kept verbatim under each resolved
 item — resolutions are **appended, not substituted**, so the history stays readable.
 
-**Counts:** 5 CRITICAL (4 RESOLVED) · 10 HIGH (3 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
+**Counts:** 5 CRITICAL (4 RESOLVED) · 11 HIGH (3 RESOLVED) · 9 MEDIUM (3 RESOLVED) · 6 LOW (1 RESOLVED)
 · 1 leakage risk (counted within CRITICAL, open)
 
-**Status: 32 items tracked · 11 RESOLVED · 21 open.**
+**Status: 33 items tracked · 11 RESOLVED · 22 open.**
+
 
 
 
@@ -23,7 +24,9 @@ item — resolutions are **appended, not substituted**, so the history stays rea
 | 2B.2 — historical dataset | 1 | GG-026 (playoff policy decided at dataset level) |
 | 2B.3 — evaluation harness | 0 | Measurement only; **opened GG-028**; LEAK-001 narrowed no further |
 | 2C — cold-start estimator | 0 | GG-028 addressed via inputs (raw model unchanged); **opened GG-029** |
-| **Total** | **11** | 21 remain open, incl. LEAK-001 and R3-001 |
+| 2D — discrimination research | 0 | Research only, nothing promoted; GG-029 confirmed on clean holdout; **opened GG-031** |
+| **Total** | **11** | 22 remain open, incl. LEAK-001 and R3-001 |
+
 
 
 
@@ -633,6 +636,53 @@ self-contradictory and the season is refused rather than imported.
   as Epic 2D's objective — bivariate/Dixon-Coles dependence and team-level attack/defence parameters
   attack this, whereas further prior tuning cannot. Do **not** respond by fitting a recalibration
   layer: it would improve the score while leaving the ranking, and therefore the real problem, intact.
+- **Update (Epic 2D) — CONFIRMED on an untouched holdout, and action (b) is now ANSWERED: no.**
+  Both recommendations were carried out. (a) AUC, prediction spread and the constant-predictor
+  benchmark are now computed by `domain/discrimination.py` and printed beside every Brier in the 2D
+  reports. (b) Discrimination *was* made the objective, and the structural candidates named above —
+  Maher attack/defence, Dixon-Coles dependence, bivariate Poisson — were built and evaluated. **They
+  do not help.** All ΔAUC 95% confidence intervals include zero on development, validation and the
+  2024 holdout. On the holdout the constant still wins on Brier (0.2469 vs raw 0.2601), so this item's
+  central warning survives contact with a clean partition. The "do not fit a recalibration layer"
+  instruction is reinforced, not weakened, by GG-031 below: with AUC ≈ 0.54 a monotone recalibration
+  provably cannot add skill. **Stays open** — it is a property of the feature set, and no work in 2D
+  reduced it.
+
+### GG-031 — Goal counts impose a hard discrimination ceiling of ≈0.568 AUC
+- **Component:** Model class / feature set · **Opened:** Epic 2D · **OPEN (may be unfixable in kind)**
+- **Problem:** The information needed to rank BTTS fixtures is largely **absent from goal counts**, so
+  no estimator or model structure built solely on them can discriminate well. This is a stronger claim
+  than GG-029 (which observed poor AUC) because it bounds what any future model of this class can
+  achieve.
+- **Evidence:** A deliberately **leaky** diagnostic (`research/epic2d_experiment.OracleCeilingProbe`)
+  was fitted on the full dataset **including the target season and each target fixture itself**, giving
+  it perfect hindsight knowledge of every team's strength. It reaches **AUC 0.5679**. Honest
+  point-in-time candidates already reach **0.537–0.546**.
+
+  | arm | AUC |
+  |---|---|
+  | POISSON_V1_RAW (honest) | 0.5229 |
+  | C1_MAHER (honest) | 0.537–0.546 |
+  | ORACLE_LEAKY_CEILING (**cheats**) | **0.5679** |
+
+  The probe is quarantined by construction: its `model_id` is prefixed `ORACLE_LEAKY`, it is never
+  registered in the harness model registry, and `tests/regression/test_epic2d_protocol.py` asserts all
+  of that plus the fact that it really does see the target.
+- **Impact:** Better *estimation* of the same quantities can recover **at most ~0.02–0.03 AUC**, and
+  nothing can exceed the ceiling because the ceiling already cheats. Two concrete consequences:
+  1. **Further structure on goal counts is not worth building.** Time decay (ξ̂ = 0 at the boundary)
+     and the bivariate shared component (λ₃ not identifiable) were both rejected *by the data* in 2D,
+     which is what a ceiling looks like from the inside.
+  2. **Recalibration is disqualified as the next step.** A monotone recalibration cannot change
+     ranking, so it would improve Brier while adding no skill — the GG-029 trap restated.
+- **Caveat, stated deliberately:** the probe is in-sample, so 0.5679 is an *estimate* of the ceiling and
+  most likely an **optimistic** one. That only strengthens the conclusion.
+- **Action:** Do not attack this with another goal-count model. Either introduce genuinely new
+  information (shots, xG, lineups, in-play state) or first measure whether the odds-derived market
+  probability discriminates better than 0.568 — which would establish whether the ceiling is a property
+  of football or of *this feature set*. Note the market measurement is currently blocked by LEAK-001
+  (odds are not stored point-in-time).
+
 
 ---
 
@@ -777,13 +827,40 @@ output directory; `git rm --cached` the artefacts.
 | Dead providers | — | GG-009 | — | GG-018 |
 | Storage / evaluation | LEAK-001 | ✅ GG-026 | — | — |
 | Model (`poisson.py`) | — | GG-028 (addressed via inputs), GG-029 | — | — |
+| Model class / feature set | — | GG-031 | — | — |
 | Tooling | — | — | — | GG-022, GG-023 |
 
-**Open by severity (21 total):** 1 CRITICAL (R3-001) + LEAK-001 · 8 HIGH (GG-002-B, GG-005,
-GG-007, GG-008, GG-009, GG-024, GG-028, GG-029) · 6 MEDIUM (GG-010, GG-011, GG-015, GG-016, GG-017,
-GG-027) · 5 LOW (GG-018, GG-019, GG-021, GG-022, GG-023).
+**Open by severity (22 total):** 1 CRITICAL (R3-001) + LEAK-001 · 9 HIGH (GG-002-B, GG-005,
+GG-007, GG-008, GG-009, GG-024, GG-028, GG-029, GG-031) · 6 MEDIUM (GG-010, GG-011, GG-015, GG-016,
+GG-017, GG-027) · 5 LOW (GG-018, GG-019, GG-021, GG-022, GG-023).
+
+
+**New in Epic 2D.** Nothing was promoted; the Epic bought an *answer*, not a model. **GG-029 is
+confirmed and sharpened on a genuinely untouched holdout (2024):** the constant base-rate predictor
+scores Brier 0.2469 against raw POISSON_V1's 0.2601 and the shrunk estimator's 0.2528 — the constant
+still wins, so Brier remains disqualified as a selection objective. Every 2D parameter was therefore
+chosen on out-of-sample **goal-count likelihood** instead. **GG-031 is opened: a discrimination
+ceiling.** A deliberately leaky probe fitted on the full dataset *including each target fixture* reaches
+only AUC 0.5679, while honest candidates already reach 0.537-0.546 — so perfect knowledge of team
+strength is worth at most ~0.02-0.03 AUC and the limit is the information content of goal counts, not
+estimation error. Consequences: **no further structure should be added to goal-count models** (Maher,
+exponential time decay, Dixon-Coles and bivariate Poisson all produced ΔAUC confidence intervals
+containing zero on all three partitions), and **recalibration must not be attempted next** — a monotone
+recalibration cannot change ranking, so it would improve Brier while adding no skill, which is exactly
+the GG-029 trap. Two candidates were dropped on evidence rather than constrained into behaving: the
+decay rate maximised at the boundary ξ̂ = 0 (recency-weighting *reduces* predictive likelihood here) and
+the bivariate shared component was not identifiable (λ₃ maximised at 0). GG-028's severity is further
+quantified on unseen data: raw POISSON_V1 put 13 holdout fixtures in the `[0, 0.10)` bin with a mean
+prediction of 0.005 against an observed BTTS rate of 0.538 — a **0.533 calibration gap** — and 12
+exact-`0.0` predictions, all of which the estimator eliminates. Promotion identification is unchanged
+from Epic 2C and still has no debt ID because ESPN exposes no promotion field: the 2D candidates refuse
+teams absent from the fitting window rather than inferring promotion or substituting league average.
+
+LEAK-001's odds row is untouched; the evaluation never reached odds or `decision.py`, and `poisson.py`,
+`config.py`, `filters.py`, `decision.py`, `shared/odds.py` and `run3/` are unmodified.
 
 **New in Epic 2C.** GG-028 is **addressed for the production path and left open for the raw model**:
+
 the Gamma-Poisson input estimator makes an exact-zero probability arithmetically unreachable
 (exact-`0.0` predictions 19→0 on validation, 17→0 on holdout, on identical fixture intersections), while
 `poisson.py` stays byte-identical so the baseline remains reproducible. **GG-029 is opened, and it is

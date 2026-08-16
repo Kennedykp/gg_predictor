@@ -1,0 +1,37 @@
+==========================================================================
+EPIC 2D  stage=likelihood  seasons=[2018, 2019]  leagues=['eng.1']
+==========================================================================
+dataset matches=8079 missing_windows=0
+WARNING: season 2018 was previously inspected (Epic 2A/2B.3/2C development); it is NOT untouched.
+WARNING: season 2019 was previously inspected (Epic 2A/2B.3/2C development); it is NOT untouched.
+
+XI PROFILE - out-of-sample GOAL-COUNT log-likelihood per fixture
+(selected on goals, never on BTTS Brier - see GG-029)
+  xi=0.0000  half_life=   inf mean_loglik=-2.95245 n=120
+  xi=0.0010  half_life=  693d mean_loglik=-2.95414 n=120
+  xi=0.0020  half_life=  347d mean_loglik=-2.95859 n=120
+  xi=0.0030  half_life=  231d mean_loglik=-2.96483 n=120
+  xi=0.0050  half_life=  139d mean_loglik=-2.97977 n=120
+  xi=0.0075  half_life=   92d mean_loglik=-3.0009 n=120
+  xi=0.0100  half_life=   69d mean_loglik=-3.02399 n=120
+  xi=0.0150  half_life=   46d mean_loglik=-3.07233 n=120
+  xi=0.0200  half_life=   35d mean_loglik=-3.12216 n=120
+  -> best xi by likelihood = 0.0
+
+RHO PROFILE (Dixon-Coles), at the selected xi
+  rho=-0.200  mean_loglik=-2.95571 n=120
+  rho=-0.150  mean_loglik=-2.95286 n=120
+  rho=-0.100  mean_loglik=-2.95144 n=120
+  rho=-0.050  mean_loglik=-2.95132 n=120
+  rho=0.000   mean_loglik=-2.95245 n=120
+  rho=0.050   mean_loglik=-2.95481 n=120
+  rho=0.100   mean_loglik=-2.95846 n=120
+
+LAMBDA3 IDENTIFIABILITY PROFILE (bivariate Poisson)
+If flat or maximised at 0, C4 is DROPPED rather than constrained.
+  lambda3=0.00  mean_loglik=-2.95245 n=120
+  lambda3=0.05  mean_loglik=-2.96138 n=120
+  lambda3=0.10  mean_loglik=-2.97175 n=120
+  lambda3=0.20  mean_loglik=-2.99776 n=120
+  lambda3=0.30  mean_loglik=-3.03338 n=120
+  lambda3=0.50  mean_loglik=-3.1585 n=120
