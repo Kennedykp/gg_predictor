@@ -20,3 +20,12 @@ run3/run3_output_*.json
 # Epic 2A research tooling: cached ESPN payloads (read-only audit artifacts)
 research/.cache/
 research/data/
+
+# Epic 2G: the prediction ledger.
+#
+# Ignored deliberately. This is OPERATIONAL evidence - what was predicted, at
+# what price, under which thresholds - not source. Committing it would mix a
+# growing append-only log into the code history, and every run would produce a
+# diff. It must be backed up, but it is not versioned here.
+data/
+
