@@ -41,6 +41,41 @@ from config import ALLOWED_LEAGUES
 from domain import evaluate_filters
 
 
+def _gate_recommendation_on_filters(
+    analysis: Dict[str, Any],
+    filter_status: str,
+) -> Dict[str, Any]:
+    """
+    Withhold the recommendation unless the hard filters explicitly PASSED.
+
+    EPIC 2F-P0-1. `analyze_market()` derives `system_recommendation` from edge
+    and odds ALONE. This file then attached `filter_status`/`filter_reasons`
+    beside that verdict without ever revising it, so a row could state the very
+    reasons it must be rejected and still publish RECOMMEND_PLAY. A fixture
+    whose sides both average 0.30 goals - an unambiguous MIN_AVG_GOALS failure -
+    was published as STRONG_VALUE / RECOMMEND_PLAY, and `print_summary` then
+    collected it into the headline "RECOMMENDED PLAYS" list.
+
+    Only an explicit "PASSED" permits a play. "FILTERED" (a statistic breached a
+    threshold) and "FILTER_DATA_UNAVAILABLE" (no statistic existed to compare
+    against one) are both refusals. This is exactly what main.py has always done
+    by passing `filter_result.allows_recommendation` INTO `make_decision`; the
+    same rule is now applied at this file's equivalent step, so the two entry
+    points can no longer disagree about what may be published.
+
+    Nothing about the model is touched. `model_probability`, `lambda_home`,
+    `lambda_away`, `odds`, `implied_probability` and `edge` are left exactly as
+    computed. `classification` is also deliberately left alone: it describes the
+    PRICE - "was this market generous?" - not the bet, and overwriting it would
+    destroy the evidence that a filtered fixture happened to be mispriced. Only
+    the publishable recommendation changes.
+    """
+    if filter_status != "PASSED":
+        analysis["system_recommendation"] = "RECOMMEND_NO_PLAY"
+    return analysis
+
+
+
 
 
 
@@ -227,7 +262,8 @@ def analyze_gg_match(
         "filter_status": filter_status,
         "filter_reasons": filter_reasons if not passes_filters else [],
     })
-    results.append(gg_yes_analysis)
+    results.append(_gate_recommendation_on_filters(gg_yes_analysis, filter_status))
+
     
     # Analyze GG NO
     gg_no_analysis = analyze_market(
@@ -248,7 +284,8 @@ def analyze_gg_match(
         "filter_status": filter_status,
         "filter_reasons": filter_reasons if not passes_filters else [],
     })
-    results.append(gg_no_analysis)
+    results.append(_gate_recommendation_on_filters(gg_no_analysis, filter_status))
+
     
     return results
 
