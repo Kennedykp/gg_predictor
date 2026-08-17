@@ -140,10 +140,23 @@ def _point_in_time_history(espn_feed):
 
 @pytest.fixture
 def generous_odds(monkeypatch):
-    """Attractive odds on both sides, so a wrongly-passed fixture would be recommended."""
+    """
+    Attractive odds on both sides, so a wrongly-passed fixture would be recommended.
 
-    monkeypatch.setattr(shared.odds, "find_odds_for_match", lambda *a, **k: 1.80)
-    monkeypatch.setattr(main, "get_btts_odds", lambda **k: 1.80)
+    EPIC 2F-P0-1. This priced the market at 1.80, which does not honour the
+    docstring above. These fixtures model P(GG) = 0.5423, and 1.80 implies
+    0.5556, so the edge was NEGATIVE (-0.0133) and every assertion of
+    "RECOMMEND_NO_PLAY" below was satisfied by the PRICE rather than by the
+    filters. The recommendation was ungated for a year and the suite stayed
+    green. Break-even for this fixture is 1 / (0.5423 - 0.05) = 2.0313, so 2.50
+    is unambiguously above it: the edge alone (+0.1423) now WANTS to recommend,
+    and only the filter gate stops it. See TestEpic2FRecommendationGating, which
+    asserts that premise directly so this can never silently regress.
+    """
+
+    monkeypatch.setattr(shared.odds, "find_odds_for_match", lambda *a, **k: 2.50)
+    monkeypatch.setattr(main, "get_btts_odds", lambda **k: 2.50)
+
 
 
 def run_both(league_avg: float = 1.35):
@@ -289,7 +302,143 @@ class TestIdenticalFilterConclusion:
         assert gg_yes["model_probability"] == pytest.approx(main_result["gg_probability"], abs=1e-4)
 
 
+class TestEpic2FRecommendationGating:
+    """
+    EPIC 2F-P0-1 — a filter verdict must GATE the recommendation, not annotate it.
+
+    `analyze_market()` derives `system_recommendation` from edge and odds alone.
+    `analyze_all.py` attached `filter_status`/`filter_reasons` to the row without
+    revising that verdict, so a fixture could publish the reasons it must be
+    rejected AND `RECOMMEND_PLAY` in the same breath, and `print_summary` listed
+    it under "RECOMMENDED PLAYS".
+
+    Every test here prices the market at 2.50, above this fixture's 2.0313
+    break-even, so the edge genuinely wants to recommend and only the gate stops
+    it. `test_the_edge_alone_would_recommend` pins that premise, which is what
+    the previous 1.80 fixture lacked.
+    """
+
+    def test_the_edge_alone_would_recommend(self, espn_stats, generous_odds):
+        """
+        Anti-vacuity guard, and the reason the original test never caught this.
+
+        A PASSING fixture at 2.50 must reach RECOMMEND_PLAY. If a future change
+        makes these odds unattractive, or moves the probability, this fails
+        loudly instead of letting the tests below pass for the wrong reason.
+        """
+        espn_stats({"359": SOLID_AWAY, "360": SOLID_AWAY})
+        _, analyze_rows = run_both()
+
+        gg_yes = next(r for r in analyze_rows if r["market"] == "GG_YES")
+        assert gg_yes["filter_status"] == "PASSED"
+        assert gg_yes["edge"] > 0.05
+        assert gg_yes["system_recommendation"] == "RECOMMEND_PLAY"
+
+    def test_failed_filters_cannot_recommend_despite_high_edge(self, espn_stats, generous_odds):
+        """A high edge on a fixture that FAILED the hard filters must not be played."""
+        espn_stats({"359": LEAKY_HOME, "360": SOLID_AWAY})
+        _, analyze_rows = run_both()
+
+        assert all(row["filter_status"] == "FILTERED" for row in analyze_rows)
+        assert all(row["system_recommendation"] == "RECOMMEND_NO_PLAY" for row in analyze_rows)
+
+        # The bet is refused, but the measurements survive: the edge is still
+        # reported, so the refusal is auditable rather than hidden.
+        gg_yes = next(r for r in analyze_rows if r["market"] == "GG_YES")
+        assert gg_yes["edge"] > 0.05
+        assert gg_yes["model_probability"] is not None
+        assert gg_yes["filter_reasons"]
+
+    def test_unavailable_filter_data_cannot_recommend_despite_high_edge(
+        self, espn_stats, generous_odds, monkeypatch
+    ):
+        """
+        Absent data is not permission. Only the clean-sheet lookup is failed, so
+        the model still has all five inputs and the row still carries a real
+        edge - otherwise this would pass merely because nothing was computed.
+        """
+        espn_stats({"359": SOLID_AWAY, "360": SOLID_AWAY})
+        for module in (main, analyze_all):
+            monkeypatch.setattr(module, "get_team_history", lambda **kwargs: None)
+        _, analyze_rows = run_both()
+
+        assert all(row["filter_status"] == "FILTER_DATA_UNAVAILABLE" for row in analyze_rows)
+        assert all(row["system_recommendation"] == "RECOMMEND_NO_PLAY" for row in analyze_rows)
+
+        gg_yes = next(r for r in analyze_rows if r["market"] == "GG_YES")
+        assert gg_yes["edge"] > 0.05
+        assert gg_yes["model_probability"] is not None
+
+    def test_gate_never_recommends_against_a_non_passing_status(self, espn_stats, generous_odds):
+        """
+        The invariant, stated once over every row rather than per scenario:
+        RECOMMEND_PLAY implies filter_status == "PASSED".
+        """
+        for home_payload, away_payload in (
+            (LEAKY_HOME, SOLID_AWAY),
+            (SOLID_AWAY, LEAKY_HOME),
+            (LEAKY_HOME, LEAKY_HOME),
+            (SOLID_AWAY, SOLID_AWAY),
+        ):
+            espn_stats({"359": home_payload, "360": away_payload})
+            _, analyze_rows = run_both()
+
+            for row in analyze_rows:
+                if row["system_recommendation"] == "RECOMMEND_PLAY":
+                    assert row["filter_status"] == "PASSED", (
+                        f"{row['market']} recommended a play with "
+                        f"filter_status={row['filter_status']}"
+                    )
+
+    def test_gate_leaves_every_measurement_untouched(self, espn_stats, generous_odds):
+        """
+        The fix must change the RECOMMENDATION and nothing else. Probability,
+        lambdas, odds, implied probability, edge and classification are all
+        evidence and must survive the refusal intact - `classification` included,
+        because it describes the PRICE, not the bet.
+        """
+        espn_stats({"359": LEAKY_HOME, "360": SOLID_AWAY})
+        _, analyze_rows = run_both()
+
+        gg_yes = next(r for r in analyze_rows if r["market"] == "GG_YES")
+        assert gg_yes["filter_status"] == "FILTERED"
+        assert gg_yes["system_recommendation"] == "RECOMMEND_NO_PLAY"
+
+        # A genuinely mispriced but unbettable market still reads as mispriced.
+        assert gg_yes["classification"] == "STRONG_VALUE"
+        assert gg_yes["odds"] == 2.50
+        assert gg_yes["implied_probability"] == pytest.approx(0.40, abs=1e-4)
+        assert gg_yes["model_probability"] is not None
+        assert gg_yes["lambda_home"] is not None
+        assert gg_yes["lambda_away"] is not None
+        assert gg_yes["edge"] == pytest.approx(
+            gg_yes["model_probability"] - gg_yes["implied_probability"], abs=1e-3
+        )
+
+    def test_both_entry_points_now_agree_on_what_may_be_published(
+        self, espn_stats, generous_odds
+    ):
+        """
+        The GG-006 guarantee extended to the publication step. main.py gates on
+        `allows_recommendation`; analyze_all.py now applies the same rule, so a
+        FLAG in one and a RECOMMEND_PLAY in the other can no longer disagree.
+        """
+        for home_payload, away_payload in (
+            (LEAKY_HOME, SOLID_AWAY),
+            (SOLID_AWAY, SOLID_AWAY),
+        ):
+            espn_stats({"359": home_payload, "360": away_payload})
+            main_result, analyze_rows = run_both()
+
+            main_recommends = main_result["decision"] != "NO BET"
+            gg_yes = next(r for r in analyze_rows if r["market"] == "GG_YES")
+            analyze_recommends = gg_yes["system_recommendation"] == "RECOMMEND_PLAY"
+
+            assert main_recommends == analyze_recommends
+
+
 class TestSharedBoundaryIsTheOnlyInterpreter:
+
     """
     Structural guard. Both entry points must obtain filter inputs from
     `build_filter_stats`; if either starts assembling its own, the mapping can
