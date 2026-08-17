@@ -17,8 +17,8 @@ import pytest
 import prediction_ledger
 from domain.prediction_log import LivePredictionStatus
 from prediction_ledger import (
-    CaptureReport,
     DEFAULT_LEDGER_DIR,
+    CaptureReport,
     build_records,
     code_revision,
     ledger_filename,

@@ -21,7 +21,6 @@ prove they can fail. A guard that cannot fail is not a guard.
 
 import ast
 import json
-from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest

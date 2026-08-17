@@ -510,4 +510,4 @@ class TestAdapterIsReadOnly:
         import dataclasses
 
         with pytest.raises(dataclasses.FrozenInstanceError):
-            record().probability = 0.99  # type: ignore[misc]
+            record().__setattr__("probability", 0.99)
