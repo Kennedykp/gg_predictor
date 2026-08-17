@@ -280,6 +280,44 @@ def main():
     write_csv(results, f"output_{date_str}.csv")
     write_json(results, f"output_{date_str}.json")
 
+    # ------------------------------------------------------------------
+    # EPIC 2G. Capture what was predicted, before the process exits.
+    #
+    # Until now every prediction died with the process: `output_{date}.json` is
+    # overwritten by the next run of the same date, so yesterday's probability,
+    # the odds it was priced against and the thresholds in force are all
+    # unrecoverable. Nothing could be graded later because nothing was kept.
+    #
+    # THREE THINGS ABOUT WHERE THIS CALL SITS:
+    #
+    # It is in `main()`, NOT in `process_fixture`. Every probability, filter
+    # verdict and recommendation is decided inside that function, and it is
+    # deliberately not touched, so capture is structurally incapable of altering
+    # a prediction. By this line `results` is already final: printed, and written
+    # to CSV and JSON.
+    #
+    # It is AFTER the existing writers. The ledger is the newest and least
+    # proven part of this path; it must never be able to cost the outputs the
+    # system already depends on.
+    #
+    # It is imported HERE, not at module scope, so importing `main` does not
+    # import the ledger at all - the entry-point consistency tests drive
+    # `process_fixture` directly and never touch this code.
+    #
+    # The exception is swallowed on purpose. Observability is not worth a lost
+    # matchday: a full disk must degrade to "predictions not recorded", never to
+    # "the run failed". It is printed rather than silent, because capture that
+    # fails invisibly is worse than no capture - it would look like a day on
+    # which nothing was predicted.
+    # ------------------------------------------------------------------
+    try:
+        from prediction_ledger import record_predictions
+
+        print(record_predictions(results, target_date).summary())
+    except Exception as exc:  # noqa: BLE001 - capture must never break a run
+        print(f"WARNING: prediction ledger capture failed: {exc}")
+
+
 
 if __name__ == "__main__":
     main()
