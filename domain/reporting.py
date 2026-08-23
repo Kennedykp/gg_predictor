@@ -29,6 +29,19 @@ it only ever reads `PredictionRecord.probability`, which came off the ledger.
 Adding a metric here would put evaluation mathematics in two places, and the
 copy would be the one that drifts.
 
+EPIC 2J ADDITION
+----------------
+Each `Group` now also carries a `QualityAssessment` from `domain/quality.py`,
+which decides whether that group's metrics may be presented as evidence of model
+quality (2G-R5). That is a classification of numbers already computed here, not a
+new metric: AUC and the constant-predictor Brier come from the frozen
+`domain/discrimination.py`, over the very same records `summarise` was given.
+
+The gate is applied PER GROUP, independently. This is the dimension where the
+original defect actually bit: a season with several hundred settled fixtures
+shatters into per-competition groups of one or two, and each of those was
+previously marked reportable on its own.
+
 Pure: no filesystem, no network, no clock. Grouping is a function of its inputs.
 """
 
@@ -40,6 +53,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from domain.evaluation import MetricSummary, summarise
 from domain.evaluation_input import EvaluationInput, SettlementState, to_prediction_records
+from domain.quality import MINIMUM_REPORTABLE_N, QualityAssessment, ReportStatus, assess
 
 __all__ = [
     "REPORTING_SCHEMA_VERSION",
@@ -54,7 +68,13 @@ __all__ = [
     "summarise_dimensions",
 ]
 
-REPORTING_SCHEMA_VERSION = "2h5.1"
+# 2j.1: every group now carries a `QualityAssessment` (Epic 2J). The version is
+# bumped rather than left alone because a consumer reading a 2h5.1 artifact must
+# not assume the quality fields are merely absent-by-chance - before 2J they did
+# not exist, and a report without them is one that could still present a Brier
+# score as a standalone quality claim.
+REPORTING_SCHEMA_VERSION = "2j.1"
+
 
 # Shown when a group spans more than one model version.
 #
@@ -123,6 +143,7 @@ class Group:
     label: str
     counts: GroupCounts
     summary: MetricSummary
+    quality: QualityAssessment
 
     @property
     def is_reportable(self) -> bool:
@@ -133,8 +154,30 @@ class Group:
         honest but not a finding. Callers use this to distinguish "measured and
         poor" from "not yet measurable" — two situations that a bare `null` in a
         JSON field conflates.
+
+        NOTE (Epic 2J): this answers "does a metric exist", NOT "may it be
+        believed". It was the only gate before 2J, which is precisely how a Brier
+        over one observation reached a report marked reportable. Use
+        `is_quality_claim` for the second question; the two are deliberately kept
+        apart rather than merged, because "measurable but not yet meaningful" is a
+        real state that needs its own row in the output.
         """
         return self.summary.scored > 0
+
+    @property
+    def is_quality_claim(self) -> bool:
+        """
+        True when this group's metrics may be presented as evidence of quality.
+
+        Delegates to the assessment rather than re-deriving the condition, so
+        there is exactly one place where 2G-R5 is decided.
+        """
+        return self.quality.is_quality_claim
+
+    @property
+    def status(self) -> ReportStatus:
+        """The group's report status, hoisted for renderers."""
+        return self.quality.status
 
 
 def _season_label(season: Optional[int]) -> str:
@@ -244,6 +287,7 @@ def summarise_dimension(
     dimension: Dimension,
     *,
     bin_count: int = 10,
+    minimum_n: int = MINIMUM_REPORTABLE_N,
 ) -> List[Group]:
     """
     One `Group` per bucket along `dimension`, in deterministic order.
@@ -252,22 +296,36 @@ def summarise_dimension(
     which records go together. `to_prediction_records` passes ALL inputs through,
     including unresolved ones, exactly as `summarise_by_model` does — so
     `coverage` in a breakdown means the same thing it means overall.
+
+    The `QualityAssessment` is built from the SAME `records` list and the SAME
+    `MetricSummary` that was just computed from it (Epic 2J). Both are bound to
+    locals first rather than being computed inline twice: the constant-predictor
+    baseline is only an honest comparison if it is derived from the identical
+    settled population, and re-deriving the record list for the second call would
+    make that an assumption instead of a fact.
+
+    `minimum_n` is threaded through as a parameter so tests can exercise the gate
+    boundaries without mutating module state, and so a caller may tighten it. It
+    is never loosened implicitly - the default is the documented policy.
     """
     groups: List[Group] = []
     for key, members in group_inputs(inputs, dimension).items():
         model_id, model_version = _identity_of(members)
+        records = to_prediction_records(members)
+        summary = summarise(
+            records,
+            model_id=model_id,
+            model_version=model_version,
+            bin_count=bin_count,
+        )
         groups.append(
             Group(
                 dimension=dimension,
                 key=key,
                 label=" / ".join(key) if key else dimension.value,
                 counts=count_states(members),
-                summary=summarise(
-                    to_prediction_records(members),
-                    model_id=model_id,
-                    model_version=model_version,
-                    bin_count=bin_count,
-                ),
+                summary=summary,
+                quality=assess(records, summary, minimum_n=minimum_n),
             )
         )
     return groups
@@ -278,6 +336,7 @@ def summarise_dimensions(
     dimensions: Sequence[Dimension],
     *,
     bin_count: int = 10,
+    minimum_n: int = MINIMUM_REPORTABLE_N,
 ) -> Mapping[Dimension, List[Group]]:
     """
     Several breakdowns of the same inputs, keyed by dimension.
@@ -285,9 +344,20 @@ def summarise_dimensions(
     Duplicates are collapsed and the caller's order is preserved: a report asking
     for `competition` twice should not contain it twice, and reordering the flags
     should not reorder the artifact.
+
+    Every dimension is gated independently against the same `minimum_n`. A
+    competition that clears the threshold overall does not license its individual
+    seasons, and vice versa - which is the entire point, since slicing is what
+    manufactures the tiny samples in the first place.
     """
     seen: Dict[Dimension, List[Group]] = {}
     for dimension in dimensions:
         if dimension not in seen:
-            seen[dimension] = summarise_dimension(inputs, dimension, bin_count=bin_count)
+            seen[dimension] = summarise_dimension(
+                inputs,
+                dimension,
+                bin_count=bin_count,
+                minimum_n=minimum_n,
+            )
     return seen
+

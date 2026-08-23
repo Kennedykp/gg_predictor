@@ -425,7 +425,11 @@ class TestSummariseDimensions:
 
 class TestFrozenContract:
     def test_schema_version_is_stated(self) -> None:
-        assert REPORTING_SCHEMA_VERSION == "2h5.1"
+        # Bumped 2h5.1 -> 2j.1 by Epic 2J, when `Group` gained `quality`. The pin
+        # is updated rather than relaxed: its job is to make a change to the
+        # artifact shape a deliberate edit, and this was one.
+        assert REPORTING_SCHEMA_VERSION == "2j.1"
+
 
     def test_groups_are_immutable(self) -> None:
         group = summarise_dimension(_one(), Dimension.OVERALL)[0]

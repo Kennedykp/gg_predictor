@@ -33,6 +33,12 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from domain.evaluation import EVALUATION_SCHEMA_VERSION
 from domain.evaluation_input import EVALUATION_INPUT_SCHEMA_VERSION, EvaluationInput, JoinReport
+from domain.quality import (
+    MINIMUM_REPORTABLE_N,
+    QUALITY_SCHEMA_VERSION,
+    QualityAssessment,
+    ReportStatus,
+)
 from domain.reporting import (
     REPORTING_SCHEMA_VERSION,
     Dimension,
@@ -61,7 +67,10 @@ __all__ = [
     "main",
 ]
 
-REPORT_SCHEMA_VERSION = "2h5.1"
+# 2j.1 (Epic 2J): every breakdown row now carries a `quality` block. Bumped in
+# step with `REPORTING_SCHEMA_VERSION` so a reader cannot encounter an artifact
+# whose two version stamps disagree about whether the quality gate was applied.
+REPORT_SCHEMA_VERSION = "2j.1"
 
 EXIT_OK = 0
 
@@ -87,6 +96,39 @@ DEFAULT_DIMENSIONS: Tuple[Dimension, ...] = (
 )
 
 
+def _quality_dict(quality: QualityAssessment) -> Dict[str, Any]:
+    """
+    The quality block: the evidence, and whether it licenses a claim.
+
+    `auc` and `auc_undefined_reason` are BOTH emitted, and exactly one of them is
+    ever non-null. A consumer that finds `auc: null` therefore always has the
+    reason next to it, which is what stops the absence being filled in with 0.5
+    downstream — the specific failure 2G-R5 forbids.
+
+    `brier` is repeated here even though it is already in `metrics`. That is
+    deliberate duplication of a VALUE, not of a computation: it is read straight
+    off the same `MetricSummary`. The point is that the number and its baseline
+    cannot be separated by a consumer that reads only one block, which is how a
+    bare Brier escaped in the first place.
+    """
+    return {
+        "status": quality.status.value,
+        "is_quality_claim": quality.is_quality_claim,
+        "headline": quality.headline,
+        "scored": quality.scored,
+        "minimum_n": quality.minimum_n,
+        "shortfall": quality.shortfall,
+        "positives": quality.positives,
+        "negatives": quality.negatives,
+        "brier": quality.summary.brier,
+        "auc": quality.auc,
+        "auc_undefined_reason": quality.auc_undefined_reason,
+        "constant_predictor_brier": quality.constant_brier,
+        "brier_delta_vs_baseline": quality.brier_delta,
+        "baseline_verdict": quality.baseline_verdict.value,
+    }
+
+
 def _group_dict(group: Group) -> Dict[str, Any]:
     """
     One breakdown row as JSON.
@@ -95,6 +137,11 @@ def _group_dict(group: Group) -> Dict[str, Any]:
     lifecycle (how much evidence exists, and what is still missing), the metrics
     describe probability quality. Merging them invites reading `missing` as a
     model property when it is an operational one.
+
+    `quality` (Epic 2J) is a third sibling for the same reason: it describes what
+    may be CLAIMED about the metrics. `metrics` is retained in full even when the
+    gate refuses the claim — the raw evidence stays auditable, only the licence to
+    conclude from it is withheld.
     """
     return {
         "dimension": group.dimension.value,
@@ -108,6 +155,7 @@ def _group_dict(group: Group) -> Dict[str, Any]:
             "missing": group.counts.missing,
             "accounted_for": group.counts.accounted_for,
         },
+        "quality": _quality_dict(group.quality),
         "metrics": _summary_dict(group.summary),
     }
 
@@ -136,6 +184,7 @@ def build_report(
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
         "reporting_schema_version": REPORTING_SCHEMA_VERSION,
+        "quality_schema_version": QUALITY_SCHEMA_VERSION,
         "evaluation_schema_version": EVALUATION_SCHEMA_VERSION,
         "evaluation_input_schema_version": EVALUATION_INPUT_SCHEMA_VERSION,
         "generated_at": generated_at.astimezone(timezone.utc).isoformat(),
@@ -148,6 +197,7 @@ def build_report(
             "settlement_dir": str(settlement_dir),
             "month": month,
             "bin_count": bin_count,
+            "minimum_reportable_n": MINIMUM_REPORTABLE_N,
         },
         "join": {
             "key": ["competition", "season", "fixture_id"],
@@ -228,6 +278,26 @@ def _format(value: Optional[float], places: int = 4) -> str:
     return "n/a" if value is None else f"{value:.{places}f}"
 
 
+def _baseline_line(quality: QualityAssessment) -> str:
+    """
+    The baseline comparison, with its direction spelled out in words.
+
+    A signed delta on its own is ambiguous to a reader who does not remember that
+    lower Brier is better, and the consequence of misreading it is believing a
+    model that is losing to a constant. So the sign and the word always travel
+    together.
+    """
+    if quality.constant_brier is None:
+        return "baseline n/a"
+    delta = quality.brier_delta
+    if delta is None:
+        return f"baseline {_format(quality.constant_brier)}"
+    return (
+        f"baseline {_format(quality.constant_brier)} "
+        f"(delta {delta:+.4f} — {quality.baseline_verdict.value} than baseline)"
+    )
+
+
 def _print(join: JoinReport, breakdowns: Mapping[Dimension, List[Group]]) -> None:
     """
     Console rendering.
@@ -236,12 +306,20 @@ def _print(join: JoinReport, breakdowns: Mapping[Dimension, List[Group]]) -> Non
     hidden: "this competition has 12 predictions and nothing settled yet" is
     exactly the operational signal worth surfacing, and omitting the row would
     make an unsettled competition look like one that does not exist.
+
+    EPIC 2J. A Brier score is never printed on a line by itself. Every row that
+    carries one also carries, on the same row or the continuation beneath it, the
+    sample size, the AUC (or the reason there is none) and the constant-predictor
+    baseline. Where the gate refuses the claim the metrics are still shown, under
+    an explicit INSUFFICIENT_SAMPLE marker — the reader sees the evidence and is
+    told plainly what it does not establish.
     """
     print(
         f"join: {join.joined}/{join.predictions} joined, "
         f"{join.scored} evaluated, {join.unresolved} unresolved, "
         f"{join.missing_settlement} awaiting settlement"
     )
+    print(f"minimum reportable n: {MINIMUM_REPORTABLE_N} scored observations per group")
     for dimension, groups in breakdowns.items():
         print(f"\n{dimension.value}")
         if not groups:
@@ -249,18 +327,42 @@ def _print(join: JoinReport, breakdowns: Mapping[Dimension, List[Group]]) -> Non
             continue
         for group in groups:
             counts = group.counts
-            if group.is_reportable:
-                print(
-                    f"  {group.label:<28} scored {group.summary.scored:>4}/{counts.total:<4} "
-                    f"brier {_format(group.summary.brier)}  "
-                    f"log loss {_format(group.summary.log_loss)}"
-                )
-            else:
+            quality = group.quality
+
+            if quality.status is ReportStatus.NOT_MEASURABLE:
                 print(
                     f"  {group.label:<28} scored {0:>4}/{counts.total:<4} "
                     f"not yet measurable "
                     f"({counts.unresolved} unresolved, {counts.missing} awaiting)"
                 )
+                continue
+
+            # The metric line. Identical in shape whether or not the claim is
+            # licensed, because suppressing the numbers below the threshold would
+            # hide the evidence rather than qualify it. The qualification is the
+            # marker that follows.
+            marker = "" if quality.is_quality_claim else f"  [{quality.status.value}]"
+            print(
+                f"  {group.label:<28} scored {quality.scored:>4}/{counts.total:<4} "
+                f"brier {_format(quality.summary.brier)}  "
+                f"log loss {_format(quality.summary.log_loss)}{marker}"
+            )
+
+            # AUC never appears as a bare `n/a`: when it is undefined the reason
+            # is printed in its place, so no reader can mistake absence for 0.5.
+            auc_text = (
+                f"auc {_format(quality.auc)}"
+                if quality.auc is not None
+                else f"auc undefined — {quality.auc_undefined_reason}"
+            )
+            print(
+                f"  {'':<28} {auc_text}  "
+                f"({quality.positives} YES / {quality.negatives} NO)  "
+                f"{_baseline_line(quality)}"
+            )
+
+            if not quality.is_quality_claim:
+                print(f"  {'':<28} {quality.headline}")
 
 
 def _parse_dimensions(values: Optional[Sequence[str]]) -> Tuple[Dimension, ...]:
