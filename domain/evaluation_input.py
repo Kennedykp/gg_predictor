@@ -35,7 +35,18 @@ team name, never a date, never a fuzzy comparison. GG-008 is the standing
 reminder of why: the odds clients match teams by substring and pair "Athletic"
 with "Athletic Club". A settlement join that could do that would produce
 confident, wrong evidence.
+
+ONE FIXTURE, ONE GRADED PREDICTION (Epic 2K, finding P0-1). Every run of
+`main.py` mints a fresh `prediction_id`, so re-running a date appends a SECOND
+ledger record for the same fixture - by design, and the ledger must keep both.
+But there is only ever one football result, so grading both would count one
+observation twice: it inflates `n` toward the reporting threshold in
+`domain/quality.py` without a single extra fixture having been played, and it
+biases every metric by double-weighting whichever fixtures happened to be run
+twice. `dedupe_predictions` therefore reduces each join key to one record BEFORE
+adapting, and the discarded count is reported rather than dropped quietly.
 """
+
 
 from __future__ import annotations
 
@@ -61,10 +72,12 @@ __all__ = [
     "join_key_of_prediction",
     "join_key_of_settlement",
     "index_settlements",
+    "dedupe_predictions",
     "adapt_one",
     "join_for_evaluation",
     "scoreable",
     "to_prediction_records",
+
     "LEDGER_STATUS_TO_REASON",
 ]
 
@@ -238,6 +251,12 @@ class JoinReport:
     hide the failure that matters. `missing_settlement` high means the settlement
     job has not run; `unresolved` high means football or a provider; `unjoinable`
     non-zero means malformed ledger rows.
+
+    `predictions` counts LEDGER ROWS READ; `joined` counts UNIQUE FIXTURES
+    admitted. The two differ by `duplicate_predictions` plus `unjoinable`, which
+    is why the re-run count is reported here rather than folded into any existing
+    field: an operator who sees `joined` below `predictions` must be able to tell
+    "a date was predicted twice" from "the ledger has malformed rows".
     """
 
     predictions: int
@@ -248,11 +267,15 @@ class JoinReport:
     missing_settlement: int
     unjoinable: Dict[str, int]
     settlement_conflicts: Tuple[str, ...] = ()
+    # Superseded re-runs: ledger rows that lost the latest-`created_at` contest
+    # for their fixture. Never silently dropped - see `dedupe_predictions`.
+    duplicate_predictions: int = 0
 
     @property
     def join_rate(self) -> Optional[float]:
         """joined / predictions. None for an empty ledger - not 1.0."""
         if self.predictions <= 0:
+
             return None
         return self.joined / self.predictions
 
@@ -274,6 +297,8 @@ class JoinReport:
             f"{self.joined}/{self.predictions} joined, {self.settled} settled, "
             f"{self.unresolved} unresolved, {self.missing_settlement} awaiting settlement"
         )
+        if self.duplicate_predictions:
+            text += f", {self.duplicate_predictions} duplicates superseded"
         if self.unjoinable:
             total = sum(self.unjoinable.values())
             text += f", {total} unjoinable"
@@ -426,6 +451,83 @@ def _scores_disagree(first: Mapping[str, Any], second: Mapping[str, Any]) -> boo
 
 
 # ---------------------------------------------------------------------------
+# Deduplicating predictions (Epic 2K, finding P0-1)
+# ---------------------------------------------------------------------------
+def _created_at_sort_key(value: Any) -> str:
+    """ISO-8601 UTC strings sort chronologically, matching `_settlement_sort_key`."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _prediction_sort_key(record: Mapping[str, Any]) -> Tuple[str, str]:
+    """
+    Deterministic sort key for prediction precedence.
+
+    Later `created_at` wins. Ties are broken deterministically by `prediction_id`.
+    Matches `_settlement_sort_key` semantics: ISO-8601 UTC strings sort
+    chronologically.
+    """
+    created_at = _created_at_sort_key(record.get("created_at"))
+    prediction_id = str(record.get("prediction_id") or "")
+    return (created_at, prediction_id)
+
+
+def dedupe_predictions(
+    predictions: Iterable[Mapping[str, Any]],
+) -> Tuple[List[Mapping[str, Any]], int]:
+    """
+    Reduce predictions to at most one record per fixture (Epic 2K, finding P0-1).
+
+    ONE FIXTURE, ONE PREDICTION. When a date is predicted more than once, each
+    run appends a record to the ledger. Deduplication selects the latest
+    prediction for each canonical fixture key `(competition, season, fixture_id)`
+    using `_prediction_sort_key` (latest `created_at` wins; `prediction_id`
+    breaks ties deterministically).
+
+    Records without a valid join key (malformed records) are NOT deduplicated
+    and pass through to `adapt_one` to be recorded as unjoinable.
+
+    First-appearance ordering of distinct fixtures is preserved.
+
+    Returns `(surviving_predictions, duplicate_count)`.
+    """
+    pred_list = list(predictions)
+    if not pred_list:
+        return [], 0
+
+    best_by_key: Dict[JoinKey, Mapping[str, Any]] = {}
+    key_counts: Dict[JoinKey, int] = {}
+
+    for record in pred_list:
+        key = join_key_of_prediction(record)
+        if key is None:
+            continue
+        key_counts[key] = key_counts.get(key, 0) + 1
+        current_best = best_by_key.get(key)
+        if current_best is None or _prediction_sort_key(record) > _prediction_sort_key(current_best):
+            best_by_key[key] = record
+
+    duplicate_count = sum(count - 1 for count in key_counts.values())
+
+    surviving: List[Mapping[str, Any]] = []
+    seen_keys: set[JoinKey] = set()
+
+    for record in pred_list:
+        key = join_key_of_prediction(record)
+        if key is None:
+            surviving.append(record)
+            continue
+        if key not in seen_keys:
+            seen_keys.add(key)
+            surviving.append(best_by_key[key])
+
+    return surviving, duplicate_count
+
+
+# ---------------------------------------------------------------------------
 # Adapting one prediction
 # ---------------------------------------------------------------------------
 def _outcome_of(settlement: Optional[Mapping[str, Any]]) -> BttsOutcome:
@@ -571,16 +673,17 @@ def join_for_evaluation(
     order (ledger order preserved), so two evaluation runs over unchanged data
     are byte-comparable.
 
-    EVERY prediction is accounted for - joined, or counted in `unjoinable`.
-    Silently dropping a row would make a shrinking ledger look like an improving
-    model.
+    EVERY prediction is accounted for - joined, counted in `duplicate_predictions`,
+    or counted in `unjoinable`. Silently dropping a row would make a shrinking
+    ledger look like an improving model.
     """
     index, conflicts = index_settlements(settlements)
+    deduped, duplicate_count = dedupe_predictions(predictions)
 
     inputs: List[EvaluationInput] = []
     unjoinable: Dict[str, int] = {}
 
-    for prediction in predictions:
+    for prediction in deduped:
         key = join_key_of_prediction(prediction)
         settlement = index.get(key) if key is not None else None
         adapted, reason = adapt_one(prediction, settlement)
@@ -603,6 +706,7 @@ def join_for_evaluation(
         ),
         unjoinable=dict(sorted(unjoinable.items())),
         settlement_conflicts=conflicts,
+        duplicate_predictions=duplicate_count,
     )
     return inputs, report
 

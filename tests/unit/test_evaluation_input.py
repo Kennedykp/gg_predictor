@@ -35,6 +35,7 @@ from domain.evaluation_input import (
     StoredProvenance,
     UnjoinableReason,
     adapt_one,
+    dedupe_predictions,
     index_settlements,
     join_for_evaluation,
     join_key_of_prediction,
@@ -192,15 +193,21 @@ class TestTheJoinIsExact:
 
     def test_two_predictions_of_one_fixture_both_join_to_the_one_result(self):
         """
-        A re-run produces two predictions; the pitch produced one result. Both
-        must be graded against it - dropping either would discard evidence.
+        Epic 2K, finding P0-1: A re-run produces two predictions for one fixture;
+        the pitch produced one result. For evaluation purposes, one fixture must
+        contribute at most one observation. The duplicate is superseded, counted,
+        and exactly one scored record is produced.
         """
         inputs, report = join_for_evaluation(
             [prediction("pred-1"), prediction("pred-2")], [settlement("pred-1")]
         )
-        assert report.joined == 2
-        assert all(i.settlement_state is SettlementState.SETTLED for i in inputs)
-        assert {i.prediction_id for i in inputs} == {"pred-1", "pred-2"}
+        assert report.predictions == 2
+        assert report.joined == 1
+        assert report.scored == 1
+        assert report.duplicate_predictions == 1
+        assert len(inputs) == 1
+        assert inputs[0].settlement_state is SettlementState.SETTLED
+        assert inputs[0].prediction_id == "pred-2"
 
     def test_the_join_uses_season_not_matched_season(self):
         """
@@ -401,10 +408,15 @@ class TestMalformedRows:
         an improving model.
         """
         inputs, report = join_for_evaluation(
-            [prediction("a"), prediction("b", kickoff=None), prediction("c", fixture_id=None)],
+            [
+                prediction("a", fixture_id="1"),
+                prediction("b", fixture_id="2", kickoff=None),
+                prediction("c", fixture_id=None),
+            ],
             [],
         )
         assert report.predictions == 3
+        assert report.joined + report.duplicate_predictions + sum(report.unjoinable.values()) == 3
         assert report.joined + sum(report.unjoinable.values()) == 3
 
 
@@ -583,3 +595,232 @@ class TestPurity:
         banned = {"odds", "price", "edge", "stake", "bookmaker", "roi", "profit", "value"}
         assert not (fields & banned)
         assert not (set(type(adapted.prediction).__dataclass_fields__) & banned)
+
+
+# ---------------------------------------------------------------------------
+# Deduplication (Epic 2K, finding P0-1)
+# ---------------------------------------------------------------------------
+class TestPredictionDeduplication:
+    def test_one_prediction_for_one_fixture_unchanged_behavior(self):
+        """1. One prediction for one fixture -> unchanged behaviour."""
+        inputs, report = join_for_evaluation([prediction()], [settlement()])
+        assert report.predictions == 1
+        assert report.joined == 1
+        assert report.scored == 1
+        assert report.duplicate_predictions == 0
+        assert len(inputs) == 1
+        assert inputs[0].is_scored
+
+    def test_two_predictions_same_fixture_one_settlement_produces_one_scored(self):
+        """2. Two predictions for the same fixture + one settlement -> exactly one scored record."""
+        p1 = prediction("p-1", fixture_id="F1", created_at="2026-08-15T09:00:00+00:00")
+        p2 = prediction("p-2", fixture_id="F1", created_at="2026-08-15T10:00:00+00:00")
+        inputs, report = join_for_evaluation([p1, p2], [settlement(fixture_id="F1")])
+        assert report.predictions == 2
+        assert report.joined == 1
+        assert report.scored == 1
+        assert report.duplicate_predictions == 1
+        assert len(inputs) == 1
+        assert inputs[0].prediction_id == "p-2"
+
+    def test_duplicate_predictions_different_probabilities_latest_created_at_wins(self):
+        """3. Duplicate predictions with different probabilities -> selected follows deterministic rule."""
+        p_early = prediction(
+            "p-early",
+            fixture_id="F1",
+            created_at="2026-08-15T09:00:00+00:00",
+            probability=0.90,
+        )
+        p_late = prediction(
+            "p-late",
+            fixture_id="F1",
+            created_at="2026-08-15T11:00:00+00:00",
+            probability=0.10,
+        )
+        inputs, report = join_for_evaluation([p_early, p_late], [settlement(fixture_id="F1")])
+        assert report.joined == 1
+        assert report.duplicate_predictions == 1
+        assert inputs[0].prediction_id == "p-late"
+        assert inputs[0].stored_probability == 0.10
+        assert inputs[0].prediction.probability == 0.10
+
+    def test_duplicate_count_is_reported(self):
+        """4. Duplicate count is reported in report and summary."""
+        p1 = prediction("p-1", fixture_id="F1", created_at="2026-08-15T09:00:00+00:00")
+        p2 = prediction("p-2", fixture_id="F1", created_at="2026-08-15T10:00:00+00:00")
+        p3 = prediction("p-3", fixture_id="F1", created_at="2026-08-15T11:00:00+00:00")
+        inputs, report = join_for_evaluation([p1, p2, p3], [settlement(fixture_id="F1")])
+        assert report.predictions == 3
+        assert report.joined == 1
+        assert report.duplicate_predictions == 2
+        assert "2 duplicates superseded" in report.summary()
+
+    def test_multiple_different_fixtures_independently_represented(self):
+        """5. Multiple different fixtures -> each fixture remains independently represented."""
+        preds = [
+            prediction("f1-early", fixture_id="F1", created_at="2026-08-15T09:00:00+00:00"),
+            prediction("f2", fixture_id="F2", created_at="2026-08-15T09:00:00+00:00"),
+            prediction("f3-early", fixture_id="F3", created_at="2026-08-15T09:00:00+00:00"),
+            prediction("f1-late", fixture_id="F1", created_at="2026-08-15T10:00:00+00:00"),
+            prediction("f3-late", fixture_id="F3", created_at="2026-08-15T11:00:00+00:00"),
+        ]
+        settlements = [
+            settlement(fixture_id="F1"),
+            settlement(fixture_id="F2"),
+            settlement(fixture_id="F3"),
+        ]
+        inputs, report = join_for_evaluation(preds, settlements)
+        assert report.predictions == 5
+        assert report.joined == 3
+        assert report.scored == 3
+        assert report.duplicate_predictions == 2
+        assert [i.join_key[2] for i in inputs] == ["F1", "F2", "F3"]
+        assert [i.prediction_id for i in inputs] == ["f1-late", "f2", "f3-late"]
+
+    def test_duplicate_predictions_unresolved_or_awaiting_settlement(self):
+        """6. Duplicate predictions that are unresolved / awaiting settlement -> correct semantics."""
+        p1 = prediction("p-1", fixture_id="F1", created_at="2026-08-15T09:00:00+00:00")
+        p2 = prediction("p-2", fixture_id="F1", created_at="2026-08-15T10:00:00+00:00")
+        inputs_unres, rep_unres = join_for_evaluation([p1, p2], [unresolved(fixture_id="F1")])
+        assert rep_unres.predictions == 2
+        assert rep_unres.joined == 1
+        assert rep_unres.unresolved == 1
+        assert rep_unres.scored == 0
+        assert rep_unres.duplicate_predictions == 1
+        assert inputs_unres[0].settlement_state is SettlementState.UNRESOLVED
+
+        inputs_miss, rep_miss = join_for_evaluation([p1, p2], [])
+        assert rep_miss.predictions == 2
+        assert rep_miss.joined == 1
+        assert rep_miss.missing_settlement == 1
+        assert rep_miss.scored == 0
+        assert rep_miss.duplicate_predictions == 1
+        assert inputs_miss[0].settlement_state is SettlementState.MISSING
+
+    def test_existing_unjoinable_and_conflict_behavior_preserved(self):
+        """7. Existing unjoinable/conflict behaviour is preserved."""
+        bad1 = prediction("b1", competition=None, fixture_id="F1")
+        bad2 = prediction("b2", competition=None, fixture_id="F1")
+        inputs, report = join_for_evaluation([bad1, bad2], [])
+        assert report.predictions == 2
+        assert report.joined == 0
+        assert report.duplicate_predictions == 0
+        assert report.unjoinable == {UnjoinableReason.NO_COMPETITION.value: 2}
+
+        k_bad1 = prediction("kb1", fixture_id="F2", kickoff=None, created_at="2026-08-15T09:00:00+00:00")
+        k_bad2 = prediction("kb2", fixture_id="F2", kickoff=None, created_at="2026-08-15T10:00:00+00:00")
+        inputs_k, rep_k = join_for_evaluation([k_bad1, k_bad2], [])
+        assert rep_k.predictions == 2
+        assert rep_k.joined == 0
+        assert rep_k.duplicate_predictions == 1
+        assert rep_k.unjoinable == {UnjoinableReason.NO_KICKOFF.value: 1}
+
+    def test_no_ledger_mutation_occurs(self):
+        """8. No ledger mutation occurs."""
+        p1 = prediction("p-1", fixture_id="F1", probability=0.9, created_at="2026-08-15T09:00:00+00:00")
+        p2 = prediction("p-2", fixture_id="F1", probability=0.1, created_at="2026-08-15T10:00:00+00:00")
+        b1, b2 = dict(p1), dict(p2)
+        join_for_evaluation([p1, p2], [settlement(fixture_id="F1")])
+        assert p1 == b1
+        assert p2 == b2
+
+    def test_stored_probability_is_passed_through_unchanged(self):
+        """9. Stored probability is passed through unchanged."""
+        awkward = 0.6123456789012345
+        p1 = prediction("p-1", fixture_id="F1", created_at="2026-08-15T09:00:00+00:00", probability=0.2)
+        p2 = prediction("p-2", fixture_id="F1", created_at="2026-08-15T10:00:00+00:00", probability=awkward)
+        inputs, _ = join_for_evaluation([p1, p2], [settlement(fixture_id="F1")])
+        assert inputs[0].stored_probability == awkward
+        assert inputs[0].prediction.probability == awkward
+
+    def test_reordering_input_predictions_does_not_change_winner(self):
+        """10. Reordering input predictions does not change the selected result."""
+        p_early = prediction("p-early", fixture_id="F1", created_at="2026-08-15T09:00:00+00:00", probability=0.8)
+        p_late = prediction("p-late", fixture_id="F1", created_at="2026-08-15T12:00:00+00:00", probability=0.3)
+
+        first, _ = join_for_evaluation([p_early, p_late], [settlement(fixture_id="F1")])
+        second, _ = join_for_evaluation([p_late, p_early], [settlement(fixture_id="F1")])
+
+        assert first[0].prediction_id == "p-late"
+        assert second[0].prediction_id == "p-late"
+        assert first[0].stored_probability == 0.3
+        assert second[0].stored_probability == 0.3
+
+        p_a = prediction("pred-a", fixture_id="F2", created_at="2026-08-15T09:00:00+00:00", probability=0.7)
+        p_b = prediction("pred-b", fixture_id="F2", created_at="2026-08-15T09:00:00+00:00", probability=0.4)
+
+        t1, _ = join_for_evaluation([p_a, p_b], [settlement(fixture_id="F2")])
+        t2, _ = join_for_evaluation([p_b, p_a], [settlement(fixture_id="F2")])
+
+        assert t1[0].prediction_id == "pred-b"
+        assert t2[0].prediction_id == "pred-b"
+        assert t1[0].stored_probability == 0.4
+        assert t2[0].stored_probability == 0.4
+
+    def test_fix_does_not_affect_quality_gate_and_prevents_artificial_n_inflation(self):
+        """11. The fix does NOT affect Epic 2J quality gate math and duplicates cannot pass it."""
+        from domain.quality import MINIMUM_REPORTABLE_N, ReportStatus, assess_records
+
+        assert MINIMUM_REPORTABLE_N == 100
+
+        preds = []
+        settles = []
+        for i in range(50):
+            fid = f"fix_{i}"
+            preds.append(prediction(f"p_{i}_v1", fixture_id=fid, created_at="2026-08-15T09:00:00+00:00", probability=0.6))
+            preds.append(prediction(f"p_{i}_v2", fixture_id=fid, created_at="2026-08-15T10:00:00+00:00", probability=0.65))
+            settles.append(settlement(f"p_{i}_v1", fixture_id=fid, outcome="YES"))
+
+        inputs, report = join_for_evaluation(preds, settles)
+        assert report.predictions == 100
+        assert report.joined == 50
+        assert report.scored == 50
+        assert report.duplicate_predictions == 50
+
+        assessment = assess_records(
+            to_prediction_records(inputs),
+            model_id="POISSON_V1",
+            model_version="1.0.0",
+        )
+        assert assessment.status is ReportStatus.INSUFFICIENT_SAMPLE
+        assert assessment.scored == 50
+        assert assessment.minimum_n == 100
+        assert assessment.shortfall == 50
+        assert not assessment.is_quality_claim
+
+    def test_reproduce_original_failure_scenario(self):
+        """
+        12. Reproduce original failure scenario (Phase 6):
+        Before fix: two predictions for F1 + one settlement -> n=2.
+        After fix: MUST produce n=1, and duplicate count visible.
+        Two genuinely different fixtures still produce n=2.
+        """
+        predA = prediction("pA", fixture_id="F1", probability=0.90, created_at="2026-08-15T09:00:00+00:00")
+        predB = prediction("pB", fixture_id="F1", probability=0.10, created_at="2026-08-15T10:00:00+00:00")
+        inputs, report = join_for_evaluation([predA, predB], [settlement("pA", fixture_id="F1")])
+
+        assert report.predictions == 2
+        assert report.joined == 1
+        assert report.scored == 1
+        assert report.duplicate_predictions == 1
+        assert inputs[0].stored_probability == 0.10
+
+        diff1 = prediction("d1", fixture_id="F1", probability=0.90)
+        diff2 = prediction("d2", fixture_id="F2", probability=0.10)
+        inputs_diff, report_diff = join_for_evaluation(
+            [diff1, diff2],
+            [settlement("d1", fixture_id="F1"), settlement("d2", fixture_id="F2")],
+        )
+        assert report_diff.predictions == 2
+        assert report_diff.joined == 2
+        assert report_diff.scored == 2
+        assert report_diff.duplicate_predictions == 0
+
+    def test_dedupe_predictions_direct_unit(self):
+        """dedupe_predictions directly returns (surviving, duplicate_count)."""
+        p1 = prediction("p-1", fixture_id="F1", created_at="2026-08-15T09:00:00+00:00")
+        p2 = prediction("p-2", fixture_id="F1", created_at="2026-08-15T10:00:00+00:00")
+        surviving, dup_count = dedupe_predictions([p1, p2])
+        assert dup_count == 1
+        assert len(surviving) == 1
+        assert surviving[0]["prediction_id"] == "p-2"
