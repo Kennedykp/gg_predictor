@@ -455,3 +455,192 @@ class TestExplicitTimeoutIsAlwaysPassed:
         espn._fetch(URL, {"dates": "20260118"})
         assert transport.calls[0]["url"] == URL
         assert transport.calls[0]["kwargs"]["params"] == {"dates": "20260118"}
+
+
+# ---------------------------------------------------------------------------
+# (11) Scoreboard window date-range fallback (HTTP 400 -> single dates)
+# ---------------------------------------------------------------------------
+class TestScoreboardWindowFallback:
+    """
+    ESPN returns HTTP 400 for range queries (dates=YYYYMMDD-YYYYMMDD) as of Sept 2026.
+
+    _fetch_scoreboard_window must:
+      - Try the range query first (1 request if supported).
+      - On HTTP 400, fall back to querying each single date in the range.
+      - Assemble events into a merged payload preserving structure and identity.
+      - Never fall back on 5xx or connection errors (preserves retry/error semantics).
+      - Fail the window if any day in the range fails (partial windows are rejected).
+    """
+
+    def test_range_query_success_costs_single_request(self, fake_get):
+        """If range query works (200), no decomposition is performed."""
+        payload = {"events": [{"id": "ev1"}], "leagues": [{"id": "ger.1"}]}
+        transport = fake_get(FakeResponse(200, payload=payload))
+
+        result = espn._fetch_scoreboard_window(URL, "20260910-20260912")
+        assert result.ok is True
+        assert transport.call_count == 1
+        assert transport.calls[0]["kwargs"]["params"]["dates"] == "20260910-20260912"
+        assert result.data == payload
+
+    def test_range_http_400_falls_back_to_single_date_queries(self, monkeypatch):
+        """On range HTTP 400, decompose into individual daily requests and merge."""
+        calls = []
+
+        def mock_get(url, params=None, timeout=None):
+            dates_param = params.get("dates") if params else None
+            calls.append(dates_param)
+            if dates_param == "20260910-20260912":
+                return FakeResponse(400)
+            elif dates_param == "20260910":
+                return FakeResponse(200, payload={"events": [{"id": "ev1", "name": "M1"}]})
+            elif dates_param == "20260911":
+                return FakeResponse(200, payload={"events": [{"id": "ev2", "name": "M2"}]})
+            elif dates_param == "20260912":
+                return FakeResponse(200, payload={"events": [{"id": "ev3", "name": "M3"}]})
+            return FakeResponse(404)
+
+        monkeypatch.setattr(espn.requests, "get", mock_get)
+
+        result = espn._fetch_scoreboard_window(
+            URL, "20260910-20260912", today=espn.date(2026, 9, 15)
+        )
+        assert result.ok is True
+        assert result.data is not None
+
+        # Decomposed into range attempt followed by 3 single dates
+        assert calls == ["20260910-20260912", "20260910", "20260911", "20260912"]
+
+        event_ids = [e["id"] for e in result.data.get("events", [])]
+        assert event_ids == ["ev1", "ev2", "ev3"]
+
+    def test_range_server_error_does_not_fall_back(self, fake_get):
+        """5xx on range query propagates immediately without daily fallback."""
+        transport = fake_get(FakeResponse(500))
+        result = espn._fetch_scoreboard_window(URL, "20260910-20260912")
+        assert result.ok is False
+        assert result.error == ESPNError.SERVER_ERROR
+        # All retries were for the range query, never decomposed into single days
+        for call in transport.calls:
+            assert call["kwargs"]["params"]["dates"] == "20260910-20260912"
+
+    def test_single_date_window_does_not_decompose(self, fake_get):
+        """A window that is already a single date returns 400 immediately without loop."""
+        transport = fake_get(FakeResponse(400))
+        result = espn._fetch_scoreboard_window(URL, "20260911")
+        assert result.ok is False
+        assert result.error == ESPNError.HTTP_ERROR
+        assert transport.call_count == 1
+
+    def test_daily_failure_fails_entire_window(self, monkeypatch):
+        """If any day in the decomposed range fails, the entire window fails."""
+        def mock_get(url, params=None, timeout=None):
+            dates_param = params.get("dates") if params else None
+            if dates_param == "20260910-20260912":
+                return FakeResponse(400)
+            elif dates_param == "20260910":
+                return FakeResponse(200, payload={"events": [{"id": "ev1"}]})
+            elif dates_param == "20260911":
+                # Day 2 fails with 500
+                return FakeResponse(500)
+            return FakeResponse(200, payload={"events": []})
+
+        monkeypatch.setattr(espn.requests, "get", mock_get)
+
+        result = espn._fetch_scoreboard_window(
+            URL, "20260910-20260912", today=espn.date(2026, 9, 15)
+        )
+        assert result.ok is False
+        assert result.error == ESPNError.SERVER_ERROR
+
+    def test_get_league_history_recovers_fixtures_on_range_400(self, monkeypatch):
+        """get_league_history succeeds via single-date iteration when range query returns 400."""
+        # Clear league cache to ensure fresh query
+        espn._league_cache.clear()
+
+        event = {
+            "id": "401884793",
+            "date": "2026-09-11T18:30Z",
+            "season": {"year": 2026, "slug": "regular-season"},
+            "competitions": [
+                {
+                    "id": "401884793",
+                    "status": {"type": {"name": "STATUS_FULL_TIME", "state": "post", "completed": True}},
+                    "competitors": [
+                        {"id": "1", "homeAway": "home", "score": "1", "team": {"id": "1", "displayName": "1. FC Union Berlin"}},
+                        {"id": "2", "homeAway": "away", "score": "3", "team": {"id": "2", "displayName": "Schalke 04"}},
+                    ],
+                }
+            ],
+        }
+
+        def mock_get(url, params=None, timeout=None):
+            dates_param = params.get("dates") if params else None
+            if "-" in dates_param:
+                # ESPN range query returns HTTP 400
+                return FakeResponse(400)
+            elif dates_param == "20260911":
+                return FakeResponse(200, payload={"events": [event], "leagues": [{"id": "720", "slug": "ger.1"}]})
+            return FakeResponse(200, payload={"events": [], "leagues": [{"id": "720", "slug": "ger.1"}]})
+
+        monkeypatch.setattr(espn.requests, "get", mock_get)
+        # Mock _season_discovery_windows to a tight 3-day window for test speed
+        monkeypatch.setattr(espn, "_season_discovery_windows", lambda s: ["20260910-20260912"])
+
+        readout = espn.get_league_history("ger.1", 2026)
+        assert readout is not None
+        assert len(readout.matches) == 1
+        m = readout.matches[0]
+        assert m.event_id == "401884793"
+        assert m.home_team_name == "1. FC Union Berlin"
+        assert m.away_team_name == "Schalke 04"
+        assert m.home_goals == 1
+        assert m.away_goals == 3
+        assert m.completed is True
+        assert (m.home_goals > 0 and m.away_goals > 0) is True  # GG YES
+
+    @pytest.mark.parametrize(
+        "league, event_id, home_name, away_name, h_score, a_score, expected_gg",
+        [
+            ("ger.1", "401884793", "1. FC Union Berlin", "Schalke 04", 1, 3, True),
+            ("ita.1", "401874759", "Venezia", "Fiorentina", 2, 4, True),
+            ("esp.1", "401882878", "Sevilla", "Valencia", 1, 0, False),
+            ("fra.1", "401876459", "Stade Rennais", "Marseille", 1, 0, False),
+        ],
+    )
+    def test_september_11_fixtures_normalization(
+        self, league, event_id, home_name, away_name, h_score, a_score, expected_gg
+    ):
+        """Authoritative score handling and normalization for the four Sept 11 fixtures."""
+        payload = {
+            "events": [
+                {
+                    "id": event_id,
+                    "date": "2026-09-11T19:00Z",
+                    "season": {"year": 2026, "slug": "regular-season"},
+                    "competitions": [
+                        {
+                            "id": event_id,
+                            "status": {"type": {"name": "STATUS_FULL_TIME", "state": "post", "completed": True}},
+                            "competitors": [
+                                {"id": "10", "homeAway": "home", "score": str(h_score), "team": {"id": "10", "displayName": home_name}},
+                                {"id": "20", "homeAway": "away", "score": str(a_score), "team": {"id": "20", "displayName": away_name}},
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "leagues": [{"id": "720", "slug": league}],
+        }
+        readout = espn.parse_scoreboard_history(payload, league, 2026)
+        assert len(readout.matches) == 1
+        m = readout.matches[0]
+        assert m.event_id == event_id
+        assert m.home_team_name == home_name
+        assert m.away_team_name == away_name
+        assert m.home_goals == h_score
+        assert m.away_goals == a_score
+        assert m.completed is True
+        assert (m.home_goals > 0 and m.away_goals > 0) is expected_gg
+
+
