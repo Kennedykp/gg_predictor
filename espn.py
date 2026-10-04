@@ -17,7 +17,7 @@ replaced with a plausible-looking constant.
 
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -892,6 +892,85 @@ def _season_discovery_windows(season: int, today: Optional[date] = None) -> List
     return [w for w in windows if int(w.split("-")[0][:4]) <= today.year]
 
 
+def _fetch_scoreboard_window(
+    url: str,
+    window: str,
+    limit: int = _SCOREBOARD_LIMIT,
+    today: Optional[date] = None,
+) -> FetchResult:
+    """
+    Fetch one discovery window from ESPN's scoreboard, with date-range fallback.
+
+    ESPN's scoreboard ``dates=`` parameter historically accepted both single-date
+    (``YYYYMMDD``) and date-range (``YYYYMMDD-YYYYMMDD``) queries.  As of
+    September 2026, ESPN returns HTTP 400 for ALL date-range queries while
+    single-date queries continue to work.
+
+    Strategy:
+      1. Try the range query first — if ESPN restores range support, this path
+         takes exactly one request per window, identical to the historical
+         behavior.
+      2. On HTTP 400, fall back to fetching each date in the range individually
+         and merging the events into a single synthetic payload.
+
+    The merged payload preserves the same ``{"events": [...]}`` shape that
+    ``parse_scoreboard_events`` and ``parse_scoreboard_history`` expect.  All
+    other payload fields (``leagues``, ``season``) are taken from the first
+    successful single-date response.
+
+    Only the ``dates=`` parameter changes; ``limit`` is forwarded unchanged.
+    """
+    # -- fast path: try the range query --
+    result = _fetch(url, params={"dates": window, "limit": limit})
+    if result.ok:
+        return result
+    if result.error is not ESPNError.HTTP_ERROR:
+        # Server error, timeout, connection — propagate as before.
+        return result
+
+    # -- HTTP 400 on a range query: fall back to single-date iteration --
+    if "-" not in window:
+        # Already a single date; nothing to decompose.
+        return result
+
+    start_str, end_str = window.split("-", 1)
+    try:
+        start_date = datetime.strptime(start_str, "%Y%m%d").date()
+        end_date = datetime.strptime(end_str, "%Y%m%d").date()
+    except ValueError:
+        return result
+
+    # Don't fetch dates in the future — they cannot hold completed fixtures.
+    effective_today = today or date.today()
+    if end_date > effective_today:
+        end_date = effective_today
+
+    all_events: list = []
+    base_payload: Optional[dict] = None
+
+    current = start_date
+    while current <= end_date:
+        day_str = current.strftime("%Y%m%d")
+        day_result = _fetch(url, params={"dates": day_str, "limit": limit})
+        if not day_result.ok:
+            # A single failed day fails the whole window, matching the existing
+            # semantics: a partial window is not a usable window.
+            return day_result
+
+        day_payload = day_result.data or {}
+        day_events = day_payload.get("events") or []
+        all_events.extend(day_events)
+
+        if base_payload is None and day_payload:
+            base_payload = day_payload
+
+        current += timedelta(days=1)
+
+    # Assemble a synthetic payload in the same shape the callers expect.
+    merged = dict(base_payload) if base_payload else {"events": []}
+    merged["events"] = all_events
+    return FetchResult(data=merged)
+
 def parse_scoreboard_events(
     payload: Dict[str, Any],
     league_code: str,
@@ -1054,7 +1133,7 @@ def get_league_match_records(
     seen_event_ids: set = set()
 
     for window in _season_discovery_windows(season):
-        result = _fetch(url, params={"dates": window, "limit": _SCOREBOARD_LIMIT})
+        result = _fetch_scoreboard_window(url, window=window, limit=_SCOREBOARD_LIMIT)
 
         if not result.ok:
             # A failed window means we cannot know what it held. Returning the
@@ -1285,7 +1364,7 @@ def get_league_history(
     seen_event_ids: set = set()
 
     for window in _season_discovery_windows(season):
-        result = _fetch(url, params={"dates": window, "limit": _SCOREBOARD_LIMIT})
+        result = _fetch_scoreboard_window(url, window=window, limit=_SCOREBOARD_LIMIT)
         if not result.ok:
             return None
 
