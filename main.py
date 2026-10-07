@@ -33,7 +33,7 @@ from espn import (
 )
 
 
-from odds_api import get_btts_odds
+from odds_api import clear_cache, get_btts_odds
 from poisson import calculate_gg_probability
 from decision import make_decision
 from output import print_results, write_csv, write_json
@@ -237,6 +237,9 @@ def run_daily_workflow(target_date: date) -> List[Dict[str, Any]]:
     """
     Run the daily GG prediction workflow.
     """
+    # Clear odds cache for fresh daily run
+    clear_cache()
+
     print(f"\nFetching fixtures for {target_date.strftime('%Y-%m-%d')}...")
     print(f"Allowed leagues: {', '.join(ALLOWED_LEAGUES.values())}")
     print()
