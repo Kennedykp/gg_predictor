@@ -52,7 +52,7 @@ LEDGER_SCHEMA_VERSION = "2g.1"
 MODEL_ID = "POISSON_V1"
 MODEL_VERSION = "1.0.0"      # poisson.py mathematics; frozen, regression-pinned
 FILTER_VERSION = "1b3.1"     # filter semantics and the FilterStats mapping
-DECISION_VERSION = "1.0.0"   # make_decision rules and the recommendation gate
+DECISION_VERSION = "1.1.0"   # make_decision rules and the recommendation gate
 DATA_SOURCE_VERSION = "espn/1b5.1"  # provider + point-in-time derivation
 
 # The three filter states, as strings.

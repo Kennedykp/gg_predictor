@@ -198,18 +198,32 @@ def process_fixture(fixture: Dict[str, Any], league_avg_goals: float) -> Dict[st
     # inputs, so the number is real and is reported. What an unevaluated filter
     # blocks is the RECOMMENDATION, not the calculation.
     #
-    # `allows_recommendation` is True only for an explicit PASS, so both FAILED
-    # and UNEVALUATED reach make_decision as False and yield NO BET.
+    # Cold-Start Recommendation Gate (OPTION A, N=3):
+    # min(home_sample, away_sample) >= 3 is required in addition to filter
+    # passing before a recommendation can be published.
+    venue_sample_sufficient = (
+        min(model_inputs.home_sample, model_inputs.away_sample) >= 3
+    )
+    if not venue_sample_sufficient:
+        sample_reason = "Insufficient venue sample (<3)"
+        if sample_reason not in result["rejection_reasons"]:
+            result["rejection_reasons"].append(sample_reason)
+
+    allows_recommendation = (
+        filter_result.allows_recommendation and venue_sample_sufficient
+    )
+
     decision_result = make_decision(
         gg_probability=result["gg_probability"],
         odds=odds,
         passes_filters=filter_result.allows_recommendation,
     )
 
-
     result["implied_probability"] = decision_result.get("implied_probability")
     result["edge"] = decision_result.get("edge")
-    result["decision"] = decision_result["decision"]
+    result["decision"] = (
+        decision_result["decision"] if allows_recommendation else "NO BET"
+    )
 
     # Add decision reasons if not already captured
     for reason in decision_result.get("reasons", []):

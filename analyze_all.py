@@ -44,9 +44,11 @@ from domain import evaluate_filters
 def _gate_recommendation_on_filters(
     analysis: Dict[str, Any],
     filter_status: str,
+    venue_sample_sufficient: bool = True,
 ) -> Dict[str, Any]:
     """
-    Withhold the recommendation unless the hard filters explicitly PASSED.
+    Withhold the recommendation unless the hard filters explicitly PASSED
+    and venue sample size is sufficient (min(home, away) >= 3).
 
     EPIC 2F-P0-1. `analyze_market()` derives `system_recommendation` from edge
     and odds ALONE. This file then attached `filter_status`/`filter_reasons`
@@ -63,6 +65,9 @@ def _gate_recommendation_on_filters(
     same rule is now applied at this file's equivalent step, so the two entry
     points can no longer disagree about what may be published.
 
+    Option A Cold-Start Gate: min(home_sample, away_sample) >= 3 is also required
+    before RECOMMEND_PLAY can be issued.
+
     Nothing about the model is touched. `model_probability`, `lambda_home`,
     `lambda_away`, `odds`, `implied_probability` and `edge` are left exactly as
     computed. `classification` is also deliberately left alone: it describes the
@@ -70,7 +75,7 @@ def _gate_recommendation_on_filters(
     destroy the evidence that a filtered fixture happened to be mispriced. Only
     the publishable recommendation changes.
     """
-    if filter_status != "PASSED":
+    if filter_status != "PASSED" or not venue_sample_sufficient:
         analysis["system_recommendation"] = "RECOMMEND_NO_PLAY"
     return analysis
 
@@ -242,7 +247,16 @@ def analyze_gg_match(
     else:
         filter_status = "FILTER_DATA_UNAVAILABLE"
 
-    
+    venue_sample_sufficient = (
+        min(model_inputs.home_sample, model_inputs.away_sample) >= 3
+    )
+
+    reasons = list(filter_reasons) if not passes_filters else []
+    if not venue_sample_sufficient:
+        sample_reason = "Insufficient venue sample (<3)"
+        if sample_reason not in reasons:
+            reasons.append(sample_reason)
+
     # Analyze GG YES
     gg_yes_analysis = analyze_market(
         market="GG_YES",
@@ -260,11 +274,21 @@ def analyze_gg_match(
         "lambda_home": prob_result.get("lambda_home"),
         "lambda_away": prob_result.get("lambda_away"),
         "filter_status": filter_status,
-        "filter_reasons": filter_reasons if not passes_filters else [],
+        "filter_reasons": list(reasons),
+        "model_input_samples": {
+            "home": model_inputs.home_sample,
+            "away": model_inputs.away_sample,
+            "league": model_inputs.league_sample,
+        },
     })
-    results.append(_gate_recommendation_on_filters(gg_yes_analysis, filter_status))
+    results.append(
+        _gate_recommendation_on_filters(
+            gg_yes_analysis,
+            filter_status,
+            venue_sample_sufficient=venue_sample_sufficient,
+        )
+    )
 
-    
     # Analyze GG NO
     gg_no_analysis = analyze_market(
         market="GG_NO",
@@ -282,11 +306,21 @@ def analyze_gg_match(
         "lambda_home": prob_result.get("lambda_home"),
         "lambda_away": prob_result.get("lambda_away"),
         "filter_status": filter_status,
-        "filter_reasons": filter_reasons if not passes_filters else [],
+        "filter_reasons": list(reasons),
+        "model_input_samples": {
+            "home": model_inputs.home_sample,
+            "away": model_inputs.away_sample,
+            "league": model_inputs.league_sample,
+        },
     })
-    results.append(_gate_recommendation_on_filters(gg_no_analysis, filter_status))
+    results.append(
+        _gate_recommendation_on_filters(
+            gg_no_analysis,
+            filter_status,
+            venue_sample_sufficient=venue_sample_sufficient,
+        )
+    )
 
-    
     return results
 
 
