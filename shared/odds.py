@@ -183,11 +183,12 @@ _last_quota: Dict[str, Optional[int]] = {
     "requests_remaining": None,
     "requests_last": None,
 }
+_last_request_status: Optional[int] = None
 
 
 def clear_cache() -> None:
     """Clear the in-memory odds and events cache and quota metrics for a fresh process/run."""
-    global _events_cache, _odds_cache, _last_quota
+    global _events_cache, _odds_cache, _last_quota, _last_request_status
     _events_cache = {}
     _odds_cache = {}
     _last_quota = {
@@ -195,6 +196,7 @@ def clear_cache() -> None:
         "requests_remaining": None,
         "requests_last": None,
     }
+    _last_request_status = None
 
 
 def get_last_quota_info() -> Dict[str, Optional[int]]:
@@ -227,6 +229,28 @@ def _teams_match(cand: str, query: str) -> bool:
     return False
 
 
+def _is_transient_failure(status_code: Optional[int], data: Optional[Any]) -> bool:
+    """
+    Determine if the request failed due to a transient error that should NOT be cached.
+    - None status_code with None data -> Network/Timeout/ConnectionError (transient)
+    - 429 -> Rate limit (transient)
+    - 5xx -> Server error (transient)
+    Non-transient cases:
+    - data is not None -> Success (cacheable, even if market absent)
+    - 401 -> Unauthorized / bad key (permanent for run)
+    - 404 -> Not found (permanent for event)
+    """
+    if data is not None:
+        return False
+    if status_code is None:
+        return True
+    if status_code == 429:
+        return True
+    if status_code >= 500:
+        return True
+    return False
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # API & CACHING FUNCTIONS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -237,7 +261,10 @@ def _make_request(endpoint: str, params: dict) -> Optional[Any]:
     Inspects quota headers (x-requests-used, x-requests-remaining, x-requests-last).
     Returns None if request fails or no API key is configured.
     """
+    global _last_request_status
+
     if not ODDS_API_KEY:
+        _last_request_status = None
         return None
 
     request_params = dict(params)
@@ -249,6 +276,7 @@ def _make_request(endpoint: str, params: dict) -> Optional[Any]:
             params=request_params,
             timeout=30,
         )
+        _last_request_status = response.status_code
         used = response.headers.get("x-requests-used")
         remaining = response.headers.get("x-requests-remaining")
         last = response.headers.get("x-requests-last")
@@ -263,6 +291,7 @@ def _make_request(endpoint: str, params: dict) -> Optional[Any]:
         return response.json()
     except requests.RequestException as e:
         status_code = getattr(getattr(e, "response", None), "status_code", None)
+        _last_request_status = status_code
         if hasattr(e, "response") and e.response is not None:
             used = e.response.headers.get("x-requests-used")
             remaining = e.response.headers.get("x-requests-remaining")
@@ -311,7 +340,12 @@ def fetch_league_events(league_code: str) -> List[Dict[str, Any]]:
         {},
     )
 
+    if _is_transient_failure(_last_request_status, data):
+        # Transient failure (429, 500, network error): do NOT cache empty list; allow retry
+        return []
+
     if not data or not isinstance(data, list):
+        # Non-transient failure (e.g. 401) or non-list response: cache empty to prevent repeated bad calls
         _events_cache[league_code] = []
         return []
 
@@ -380,7 +414,8 @@ def fetch_event_odds(league_code: str, event_id: str) -> Dict[str, Optional[floa
     """
     Stage 2: Fetch BTTS odds for a specific event from The Odds API.
     Consumes 1 quota credit (markets=btts, regions=eu).
-    Results are cached in memory by event_id for the run (including None results).
+    Results are cached in memory by event_id for the run (including None results for absent markets).
+    Transient failures (429, 500, network errors) are NOT cached, enabling retries.
 
     Returns:
         {"btts_yes": float or None, "btts_no": float or None}
@@ -405,11 +440,16 @@ def fetch_event_odds(league_code: str, event_id: str) -> Dict[str, Optional[floa
         },
     )
 
+    if _is_transient_failure(_last_request_status, data):
+        # Transient failure (429, 500, network error): do NOT cache None; allow retry on next lookup
+        return game_odds
+
     if not data or not isinstance(data, dict):
+        # Permanent failure (e.g. 401, 404): cache None to prevent repeated failing requests
         _odds_cache[event_id] = game_odds
         return game_odds
 
-    # Deterministic bookmaker selection: first bookmaker offering valid market odds
+    # Successful HTTP 200 response: parse bookmakers
     for bookmaker in data.get("bookmakers", []):
         for market in bookmaker.get("markets", []):
             if market.get("key") == "btts":
@@ -424,6 +464,7 @@ def fetch_event_odds(league_code: str, event_id: str) -> Dict[str, Optional[floa
         if game_odds["btts_yes"] is not None or game_odds["btts_no"] is not None:
             break
 
+    # Cache result (whether odds were found or BTTS market was absent on 200)
     _odds_cache[event_id] = game_odds
     return game_odds
 

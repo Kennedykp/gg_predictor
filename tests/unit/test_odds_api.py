@@ -324,7 +324,7 @@ class TestCachingBehavior:
         assert odds_2 == 1.95
 
     def test_cached_none_when_btts_unavailable(self, monkeypatch):
-        """9. Unavailable BTTS result is cached as None; repeated lookup makes no API call."""
+        """9. Unavailable BTTS result on HTTP 200 is cached as None; repeated lookup makes no API call."""
         odds_call_count = 0
         payload_no_btts = {"id": "epl_game_1", "bookmakers": []}
 
@@ -333,6 +333,144 @@ class TestCachingBehavior:
             if "/odds" in url:
                 odds_call_count += 1
                 return FakeResponse(payload_no_btts)
+            return FakeResponse(SAMPLE_EPL_EVENTS)
+
+        monkeypatch.setattr(requests, "get", router)
+
+        res_1 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        res_2 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+
+        assert res_1 is None
+        assert res_2 is None
+        assert odds_call_count == 1
+
+    def test_429_transient_failure_retries_and_does_not_cache_none(self, monkeypatch):
+        """9b. HTTP 429 on /events/{id}/odds is transient: not cached, later lookup retries."""
+        odds_call_count = 0
+
+        def router(url: str, *args, **kwargs):
+            nonlocal odds_call_count
+            if "/odds" in url:
+                odds_call_count += 1
+                if odds_call_count == 1:
+                    return FakeResponse({}, status_code=429)
+                return FakeResponse(SAMPLE_EPL_GAME_1_ODDS, status_code=200)
+            return FakeResponse(SAMPLE_EPL_EVENTS)
+
+        monkeypatch.setattr(requests, "get", router)
+
+        res_1 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        assert res_1 is None
+        assert odds_call_count == 1
+
+        # Second lookup retries and succeeds
+        res_2 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        assert res_2 == 1.95
+        assert odds_call_count == 2
+
+    def test_500_transient_failure_retries_and_does_not_cache_none(self, monkeypatch):
+        """9c. HTTP 500 on /events/{id}/odds is transient: not cached, later lookup retries."""
+        odds_call_count = 0
+
+        def router(url: str, *args, **kwargs):
+            nonlocal odds_call_count
+            if "/odds" in url:
+                odds_call_count += 1
+                if odds_call_count == 1:
+                    return FakeResponse({}, status_code=500)
+                return FakeResponse(SAMPLE_EPL_GAME_1_ODDS, status_code=200)
+            return FakeResponse(SAMPLE_EPL_EVENTS)
+
+        monkeypatch.setattr(requests, "get", router)
+
+        res_1 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        assert res_1 is None
+        assert odds_call_count == 1
+
+        # Second lookup retries and succeeds
+        res_2 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        assert res_2 == 1.95
+        assert odds_call_count == 2
+
+    def test_network_failure_transient_failure_retries(self, monkeypatch):
+        """9d. Network/ConnectionError on /events/{id}/odds is transient: not cached, later lookup retries."""
+        odds_call_count = 0
+
+        def router(url: str, *args, **kwargs):
+            nonlocal odds_call_count
+            if "/odds" in url:
+                odds_call_count += 1
+                if odds_call_count == 1:
+                    raise requests.exceptions.ConnectionError("Connection dropped")
+                return FakeResponse(SAMPLE_EPL_GAME_1_ODDS, status_code=200)
+            return FakeResponse(SAMPLE_EPL_EVENTS)
+
+        monkeypatch.setattr(requests, "get", router)
+
+        res_1 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        assert res_1 is None
+        assert odds_call_count == 1
+
+        # Second lookup retries and succeeds
+        res_2 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        assert res_2 == 1.95
+        assert odds_call_count == 2
+
+    def test_events_discovery_transient_failure_retries(self, monkeypatch):
+        """9e. Transient failure on /events is not cached: later lookup retries event discovery."""
+        events_call_count = 0
+
+        def router(url: str, *args, **kwargs):
+            nonlocal events_call_count
+            if "/events" in url and "/odds" not in url:
+                events_call_count += 1
+                if events_call_count == 1:
+                    return FakeResponse({}, status_code=429)
+                return FakeResponse(SAMPLE_EPL_EVENTS, status_code=200)
+            elif "/odds" in url:
+                return FakeResponse(SAMPLE_EPL_GAME_1_ODDS, status_code=200)
+            return FakeResponse({})
+
+        monkeypatch.setattr(requests, "get", router)
+
+        res_1 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        assert res_1 is None
+        assert events_call_count == 1
+
+        # Second lookup retries /events and resolves fixture
+        res_2 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        assert res_2 == 1.95
+        assert events_call_count == 2
+
+    def test_401_permanent_failure_does_not_retry(self, monkeypatch):
+        """9f. HTTP 401 is permanent for run: cached as None, later lookup makes no API call."""
+        odds_call_count = 0
+
+        def router(url: str, *args, **kwargs):
+            nonlocal odds_call_count
+            if "/odds" in url:
+                odds_call_count += 1
+                return FakeResponse({}, status_code=401)
+            return FakeResponse(SAMPLE_EPL_EVENTS)
+
+        monkeypatch.setattr(requests, "get", router)
+
+        res_1 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+        res_2 = odds_api.get_btts_odds("Wolves", "Spurs", "eng.1")
+
+        assert res_1 is None
+        assert res_2 is None
+        assert odds_call_count == 1
+
+    def test_404_permanent_failure_does_not_retry(self, monkeypatch):
+        """9g. HTTP 404 is permanent for event: cached as None, later lookup makes no API call."""
+        odds_call_count = 0
+
+        def router(url: str, *args, **kwargs):
+            nonlocal odds_call_count
+            if "/odds" in url:
+                odds_call_count += 1
+                return FakeResponse({}, status_code=404)
             return FakeResponse(SAMPLE_EPL_EVENTS)
 
         monkeypatch.setattr(requests, "get", router)
