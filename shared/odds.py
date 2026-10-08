@@ -14,7 +14,7 @@ Odds NEVER modify Poisson probability or model calculations.
 
 import os
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import requests
 
 # Add parent directory for imports
@@ -175,22 +175,28 @@ TEAM_ALIASES: Dict[str, str] = {
     "as saint etienne": "as saint etienne",
 }
 
-# Run-level in-memory cache and quota tracking
-_odds_cache: Dict[str, Dict[str, Any]] = {}
+# Run-level in-memory caches and quota tracking
+_events_cache: Dict[str, List[Dict[str, Any]]] = {}
+_odds_cache: Dict[str, Dict[str, Optional[float]]] = {}
 _last_quota: Dict[str, Optional[int]] = {
     "requests_used": None,
     "requests_remaining": None,
+    "requests_last": None,
 }
+_last_request_status: Optional[int] = None
 
 
 def clear_cache() -> None:
-    """Clear the in-memory odds cache and quota metrics for a fresh process/run."""
-    global _odds_cache, _last_quota
+    """Clear the in-memory odds and events cache and quota metrics for a fresh process/run."""
+    global _events_cache, _odds_cache, _last_quota, _last_request_status
+    _events_cache = {}
     _odds_cache = {}
     _last_quota = {
         "requests_used": None,
         "requests_remaining": None,
+        "requests_last": None,
     }
+    _last_request_status = None
 
 
 def get_last_quota_info() -> Dict[str, Optional[int]]:
@@ -223,6 +229,28 @@ def _teams_match(cand: str, query: str) -> bool:
     return False
 
 
+def _is_transient_failure(status_code: Optional[int], data: Optional[Any]) -> bool:
+    """
+    Determine if the request failed due to a transient error that should NOT be cached.
+    - None status_code with None data -> Network/Timeout/ConnectionError (transient)
+    - 429 -> Rate limit (transient)
+    - 5xx -> Server error (transient)
+    Non-transient cases:
+    - data is not None -> Success (cacheable, even if market absent)
+    - 401 -> Unauthorized / bad key (permanent for run)
+    - 404 -> Not found (permanent for event)
+    """
+    if data is not None:
+        return False
+    if status_code is None:
+        return True
+    if status_code == 429:
+        return True
+    if status_code >= 500:
+        return True
+    return False
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # API & CACHING FUNCTIONS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -230,10 +258,13 @@ def _teams_match(cand: str, query: str) -> bool:
 def _make_request(endpoint: str, params: dict) -> Optional[Any]:
     """
     Make authenticated request to The Odds API.
-    Inspects quota headers (x-requests-used, x-requests-remaining).
+    Inspects quota headers (x-requests-used, x-requests-remaining, x-requests-last).
     Returns None if request fails or no API key is configured.
     """
+    global _last_request_status
+
     if not ODDS_API_KEY:
+        _last_request_status = None
         return None
 
     request_params = dict(params)
@@ -245,54 +276,163 @@ def _make_request(endpoint: str, params: dict) -> Optional[Any]:
             params=request_params,
             timeout=30,
         )
+        _last_request_status = response.status_code
         used = response.headers.get("x-requests-used")
         remaining = response.headers.get("x-requests-remaining")
+        last = response.headers.get("x-requests-last")
         if used is not None and used.isdigit():
             _last_quota["requests_used"] = int(used)
         if remaining is not None and remaining.isdigit():
             _last_quota["requests_remaining"] = int(remaining)
+        if last is not None and last.isdigit():
+            _last_quota["requests_last"] = int(last)
 
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
         status_code = getattr(getattr(e, "response", None), "status_code", None)
+        _last_request_status = status_code
         if hasattr(e, "response") and e.response is not None:
             used = e.response.headers.get("x-requests-used")
             remaining = e.response.headers.get("x-requests-remaining")
+            last = e.response.headers.get("x-requests-last")
             if used is not None and used.isdigit():
                 _last_quota["requests_used"] = int(used)
             if remaining is not None and remaining.isdigit():
                 _last_quota["requests_remaining"] = int(remaining)
+            if last is not None and last.isdigit():
+                _last_quota["requests_last"] = int(last)
 
         # Sanitize: NEVER print response.url or query params which contain the API key
         print(f"Odds API request failed for '{endpoint}' (status: {status_code})")
         return None
 
 
-def fetch_league_odds(league_code: str) -> Dict[str, Dict[str, Optional[float]]]:
+def fetch_league_events(league_code: str) -> List[Dict[str, Any]]:
     """
-    Fetch all BTTS odds for a league once per process/run.
+    Stage 1: Fetch upcoming events for a league once per process/run (quota-free).
     Results are cached in memory for the duration of the run.
 
-    Returns dict mapping fixture keys to odds:
-    {
-        "home vs away": {
-            "btts_yes": 1.85,
-            "btts_no": 1.95
-        }
-    }
+    Returns a list of event dicts:
+    [
+        {
+            "id": "e492211e...",
+            "home_team": "Wolves",
+            "away_team": "Spurs",
+            "norm_home": "wolverhampton wanderers",
+            "norm_away": "tottenham hotspur",
+            "commence_time": "2026-02-08T15:00:00Z",
+        },
+        ...
+    ]
     """
-    global _odds_cache
+    global _events_cache
 
-    if league_code in _odds_cache:
-        return _odds_cache[league_code]
+    if league_code in _events_cache:
+        return _events_cache[league_code]
 
     sport_key = SPORT_KEYS.get(league_code)
     if not sport_key:
-        return {}
+        return []
 
     data = _make_request(
-        f"sports/{sport_key}/odds",
+        f"sports/{sport_key}/events",
+        {},
+    )
+
+    if _is_transient_failure(_last_request_status, data):
+        # Transient failure (429, 500, network error): do NOT cache empty list; allow retry
+        return []
+
+    if not data or not isinstance(data, list):
+        # Non-transient failure (e.g. 401) or non-list response: cache empty to prevent repeated bad calls
+        _events_cache[league_code] = []
+        return []
+
+    events_list: List[Dict[str, Any]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        event_id = item.get("id")
+        if not event_id:
+            continue
+        raw_home = item.get("home_team", "")
+        raw_away = item.get("away_team", "")
+        norm_home = normalize_team_name(raw_home)
+        norm_away = normalize_team_name(raw_away)
+        events_list.append({
+            "id": str(event_id),
+            "home_team": raw_home,
+            "away_team": raw_away,
+            "norm_home": norm_home,
+            "norm_away": norm_away,
+            "commence_time": item.get("commence_time", ""),
+        })
+
+    _events_cache[league_code] = events_list
+    return events_list
+
+
+def find_event_id_for_match(
+    home_team: str,
+    away_team: str,
+    league_code: str,
+) -> Optional[str]:
+    """
+    Safely and deterministically match an ESPN fixture to The Odds API event ID.
+    Both home and away teams must match using existing normalization and aliases.
+    Returns event_id if matched, or None if not found.
+    """
+    events = fetch_league_events(league_code)
+    if not events:
+        return None
+
+    norm_home = normalize_team_name(home_team)
+    norm_away = normalize_team_name(away_team)
+
+    # 1. Exact normalized match (highest precedence)
+    for ev in events:
+        if ev["norm_home"] == norm_home and ev["norm_away"] == norm_away:
+            return str(ev["id"])
+
+    # 2. Raw name match (lowercased)
+    clean_home = home_team.strip().lower()
+    clean_away = away_team.strip().lower()
+    for ev in events:
+        if ev["home_team"].strip().lower() == clean_home and ev["away_team"].strip().lower() == clean_away:
+            return str(ev["id"])
+
+    # 3. Pairwise match with alias / containment matching (_teams_match)
+    for ev in events:
+        if _teams_match(ev["norm_home"], norm_home) and _teams_match(ev["norm_away"], norm_away):
+            return str(ev["id"])
+
+    return None
+
+
+def fetch_event_odds(league_code: str, event_id: str) -> Dict[str, Optional[float]]:
+    """
+    Stage 2: Fetch BTTS odds for a specific event from The Odds API.
+    Consumes 1 quota credit (markets=btts, regions=eu).
+    Results are cached in memory by event_id for the run (including None results for absent markets).
+    Transient failures (429, 500, network errors) are NOT cached, enabling retries.
+
+    Returns:
+        {"btts_yes": float or None, "btts_no": float or None}
+    """
+    global _odds_cache
+
+    if event_id in _odds_cache:
+        return _odds_cache[event_id]
+
+    sport_key = SPORT_KEYS.get(league_code)
+    game_odds: Dict[str, Optional[float]] = {"btts_yes": None, "btts_no": None}
+    if not sport_key:
+        _odds_cache[event_id] = game_odds
+        return game_odds
+
+    data = _make_request(
+        f"sports/{sport_key}/events/{event_id}/odds",
         {
             "regions": "eu",
             "markets": "btts",
@@ -300,44 +440,33 @@ def fetch_league_odds(league_code: str) -> Dict[str, Dict[str, Optional[float]]]
         },
     )
 
-    if not data or not isinstance(data, list):
-        return {}
+    if _is_transient_failure(_last_request_status, data):
+        # Transient failure (429, 500, network error): do NOT cache None; allow retry on next lookup
+        return game_odds
 
-    odds_map: Dict[str, Dict[str, Optional[float]]] = {}
+    if not data or not isinstance(data, dict):
+        # Permanent failure (e.g. 401, 404): cache None to prevent repeated failing requests
+        _odds_cache[event_id] = game_odds
+        return game_odds
 
-    for game in data:
-        raw_home = game.get("home_team", "")
-        raw_away = game.get("away_team", "")
-        norm_home = normalize_team_name(raw_home)
-        norm_away = normalize_team_name(raw_away)
-        key = f"{norm_home} vs {norm_away}"
-
-        game_odds: Dict[str, Optional[float]] = {"btts_yes": None, "btts_no": None}
-
-        # Deterministic bookmaker selection: first bookmaker in the payload
-        # offering valid market odds
-        for bookmaker in game.get("bookmakers", []):
-            for market in bookmaker.get("markets", []):
-                if market.get("key") == "btts":
-                    for outcome in market.get("outcomes", []):
-                        name = outcome.get("name", "").lower()
-                        price = outcome.get("price")
-                        if price is not None and isinstance(price, (int, float)) and price > 0:
-                            if name == "yes" and game_odds["btts_yes"] is None:
-                                game_odds["btts_yes"] = float(price)
-                            elif name == "no" and game_odds["btts_no"] is None:
-                                game_odds["btts_no"] = float(price)
-            if game_odds["btts_yes"] is not None or game_odds["btts_no"] is not None:
-                break
-
+    # Successful HTTP 200 response: parse bookmakers
+    for bookmaker in data.get("bookmakers", []):
+        for market in bookmaker.get("markets", []):
+            if market.get("key") == "btts":
+                for outcome in market.get("outcomes", []):
+                    name = outcome.get("name", "").lower()
+                    price = outcome.get("price")
+                    if price is not None and isinstance(price, (int, float)) and price > 0:
+                        if name == "yes" and game_odds["btts_yes"] is None:
+                            game_odds["btts_yes"] = float(price)
+                        elif name == "no" and game_odds["btts_no"] is None:
+                            game_odds["btts_no"] = float(price)
         if game_odds["btts_yes"] is not None or game_odds["btts_no"] is not None:
-            odds_map[key] = game_odds
-            raw_key = f"{raw_home.lower().strip()} vs {raw_away.lower().strip()}"
-            if raw_key not in odds_map:
-                odds_map[raw_key] = game_odds
+            break
 
-    _odds_cache[league_code] = odds_map
-    return odds_map
+    # Cache result (whether odds were found or BTTS market was absent on 200)
+    _odds_cache[event_id] = game_odds
+    return game_odds
 
 
 def find_odds_for_match(
@@ -347,7 +476,13 @@ def find_odds_for_match(
     market: str = "btts_yes",
 ) -> Optional[float]:
     """
-    Find odds for a specific match from cached league odds.
+    Find odds for a specific match.
+
+    1. Resolves league -> sport key.
+    2. Loads league events (cached in _events_cache).
+    3. Resolves fixture -> event_id. If unresolvable, returns None (no odds request).
+    4. Fetches event odds (cached in _odds_cache).
+    5. Returns market odds as float or None.
 
     Args:
         home_team: Home team name
@@ -358,28 +493,12 @@ def find_odds_for_match(
     Returns:
         Odds as float, or None if not found
     """
-    league_odds = fetch_league_odds(league_code)
-    if not league_odds:
+    event_id = find_event_id_for_match(home_team, away_team, league_code)
+    if not event_id:
         return None
 
-    norm_home = normalize_team_name(home_team)
-    norm_away = normalize_team_name(away_team)
-
-    # 1. Exact normalized key lookup (O(1))
-    key = f"{norm_home} vs {norm_away}"
-    if key in league_odds:
-        return league_odds[key].get(market)
-
-    # 2. Iterate keys with alias / containment matching
-    for fixture_key, odds in league_odds.items():
-        parts = fixture_key.split(" vs ")
-        if len(parts) != 2:
-            continue
-        cand_home, cand_away = parts
-        if _teams_match(cand_home, norm_home) and _teams_match(cand_away, norm_away):
-            return odds.get(market)
-
-    return None
+    odds_dict = fetch_event_odds(league_code, event_id)
+    return odds_dict.get(market)
 
 
 def get_btts_odds(
@@ -388,7 +507,7 @@ def get_btts_odds(
     league_id: str,
 ) -> Optional[float]:
     """
-    Fetch BTTS Yes odds for a match from cached league odds.
+    Fetch BTTS Yes odds for a match from The Odds API.
 
     Args:
         home_team: Home team name
@@ -401,11 +520,24 @@ def get_btts_odds(
     return find_odds_for_match(home_team, away_team, league_id, market="btts_yes")
 
 
+def fetch_league_odds(league_code: str) -> Dict[str, Dict[str, Optional[float]]]:
+    """
+    Fetch all upcoming events for a league and return their event odds if loaded.
+    Maintained for interface backward compatibility.
+    """
+    events = fetch_league_events(league_code)
+    result: Dict[str, Dict[str, Optional[float]]] = {}
+    for ev in events:
+        key = f"{ev['norm_home']} vs {ev['norm_away']}"
+        event_id = ev["id"]
+        if event_id in _odds_cache:
+            result[key] = _odds_cache[event_id]
+    return result
+
+
 def get_upcoming_odds(league_id: str) -> Dict[str, float]:
     """
-    Fetch all upcoming BTTS Yes odds for a league from cached league odds.
-
-    Returns dict mapping "home_team vs away_team" to odds.
+    Fetch upcoming BTTS Yes odds that have been loaded for a league.
     """
     league_odds = fetch_league_odds(league_id)
     return {
